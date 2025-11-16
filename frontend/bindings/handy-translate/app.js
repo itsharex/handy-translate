@@ -24,16 +24,6 @@ export function CaptureSelectedScreen(startX, startY, width, height) {
 }
 
 /**
- * ExplainStream 流式解释逻辑（仅支持 DeepSeek，支持模板选择）
- * @param {string} queryText
- * @param {string} templateID
- * @returns {$CancellablePromise<void>}
- */
-export function ExplainStream(queryText, templateID) {
-    return $Call.ByID(376363948, queryText, templateID);
-}
-
-/**
  * GetExplainTemplates 获取所有解释模板
  * @returns {$CancellablePromise<string>}
  */
@@ -47,6 +37,14 @@ export function GetExplainTemplates() {
  */
 export function GetToolBarPinned() {
     return $Call.ByID(2117588528);
+}
+
+/**
+ * GetToolbarMode 获取工具栏模式（供前端调用）
+ * @returns {$CancellablePromise<string>}
+ */
+export function GetToolbarMode() {
+    return $Call.ByID(655699757);
 }
 
 /**

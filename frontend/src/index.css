@@ -124,3 +124,21 @@ body {
 *::-webkit-scrollbar-thumb:hover {
   background: #808080;
 }
+
+/* Markdown 行内代码样式 - 防止换行 */
+.markdown-content code {
+  display: inline !important;
+  white-space: nowrap !important;
+  word-break: keep-all !important;
+}
+
+/* 防止行内代码之间换行 - 使用零宽空格处理 */
+.markdown-content p {
+  line-height: 1.6;
+  word-break: break-word;
+}
+
+/* 确保行内代码不会单独换行 */
+.markdown-content p code {
+  unicode-bidi: isolate;
+}

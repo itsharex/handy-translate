@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"runtime"
 	"strings"
+	"time"
 
 	"handy-translate/config"
 	"handy-translate/history"
@@ -36,16 +37,21 @@ type AppInterface interface {
 // App is a service
 type App struct{}
 
-var currentToolbarMode = "translate" // 当前工具栏模式：translate/explain
-
 // GetToolbarMode 获取工具栏模式
 func GetToolbarMode() string {
-	return currentToolbarMode
+	return config.Data.ToolbarMode
 }
 
 // SetToolbarMode 设置工具栏模式
 func SetToolbarMode(mode string) {
-	currentToolbarMode = mode
+	config.Data.ToolbarMode = mode
+	config.Save()
+	slog.Info("SetToolbarMode", slog.String("mode", mode))
+}
+
+// GetToolbarMode 获取工具栏模式（供前端调用）
+func (a *App) GetToolbarMode() string {
+	return GetToolbarMode()
 }
 
 // MyFetch URl
@@ -66,7 +72,7 @@ func (a *App) Translate(queryText, fromLang, toLang string) string {
 
 // TranslateMeanings 翻译逻辑
 func (a *App) TranslateMeanings(queryText, fromLang, toLang string) string {
-	app.Logger.Info("Translate",
+	app.Logger.Info("TranslateMeanings",
 		slog.Any("queryText", queryText),
 		slog.Any("toLang", toLang),
 		slog.Any("fromLang", fromLang))
@@ -151,51 +157,6 @@ func (a *App) TranslateStream(queryText, fromLang, toLang string) {
 		// 不支持流式输出，使用普通翻译
 		res := processTranslate(queryText)
 		app.Event.Emit("result", res)
-	}
-}
-
-// ExplainStream 流式解释逻辑（仅支持 DeepSeek，支持模板选择）
-func (a *App) ExplainStream(queryText, templateID string) {
-	app.Logger.Info("ExplainStream",
-		slog.Any("queryText", queryText),
-		slog.Any("templateID", templateID))
-
-	translateWay := translate_service.GetTranslateWay(config.Data.TranslateWay)
-
-	// 检查是否支持流式输出
-	if streamTranslate, ok := translateWay.(translate_service.StreamTranslate); ok {
-		// 支持流式输出
-		slog.Info("使用流式解释")
-		var streamResult string
-		err := streamTranslate.PostExplainStream(queryText, templateID, func(chunk string) {
-			streamResult += chunk
-			// 每次收到数据块时发送事件到前端
-			slog.Info("发送流式解释数据块", slog.String("chunk", chunk), slog.Int("length", len(chunk)))
-			app.Event.Emit("result_stream", chunk)
-		})
-
-		if err != nil {
-			slog.Error("PostExplainStream", slog.Any("err", err))
-			// 发送错误事件
-			app.Event.Emit("result_stream_error", err.Error())
-		} else {
-			// 发送完成事件
-			app.Event.Emit("result_stream_done", "done")
-
-			// 保存解释历史记录
-			if config.Data.History.Enabled {
-				go history.GlobalHistoryService.SaveExplainRecord(queryText, streamResult, templateID)
-			}
-		}
-	} else {
-		// 不支持流式输出，使用普通解释
-		res := processExplain(queryText, templateID)
-		app.Event.Emit("result", res)
-
-		// 保存解释历史记录
-		if config.Data.History.Enabled {
-			go history.GlobalHistoryService.SaveExplainRecord(queryText, res, templateID)
-		}
 	}
 }
 
@@ -510,6 +471,7 @@ func processExplain(queryText, templateID string) string {
 			// 每次收到数据块时发送事件到前端
 			slog.Info("发送流式解释数据块", slog.String("chunk", chunk), slog.Int("length", len(chunk)))
 			app.Event.Emit("result_stream", chunk)
+			time.Sleep(time.Millisecond * 20) // 控制发送速度，防止前端卡顿
 		})
 		if err != nil {
 			slog.Error("PostExplainStream", slog.Any("err", err))
@@ -585,20 +547,35 @@ func processHook() {
 
 				// 根据工具栏模式选择翻译或解释
 				mode := GetToolbarMode()
-				if mode == "explain" {
-					// 解释模式：由前端根据选中的模板主动调用 ExplainStream
-					// 这里不直接调用，让前端收到 query 事件后主动调用
-					slog.Info("解释模式，等待前端调用 ExplainStream")
-				} else {
+				switch mode {
+				case toolbar.ExplainMode:
+					// 解释模式：后端自动处理，使用默认模板
+					templateID := config.Data.ExplainTemplates.DefaultTemplate
+					if templateID == "" {
+						// 如果没有默认模板，尝试使用第一个模板
+						for id := range config.Data.ExplainTemplates.Templates {
+							templateID = id
+							break
+						}
+					}
+					if templateID == "" {
+						slog.Error("解释模式但未找到模板")
+						app.Event.Emit("result_stream_error", "未找到解释模板")
+					} else {
+						slog.Info("解释模式，自动处理", slog.String("templateID", templateID))
+						// 自动调用解释处理
+						if _, ok := translateWay.(translate_service.StreamTranslate); ok {
+							// 流式解释：开始流式解释（会发送 result_stream 事件）
+							explainRes := processExplain(queryText, templateID)
+							slog.Info("流式解释完成，结果长度", slog.Int("len", len(explainRes)))
+						}
+					}
+				default:
 					// 翻译模式（默认）
 					if _, ok := translateWay.(translate_service.StreamTranslate); ok {
 						// 流式翻译：开始流式翻译（会发送 result_stream 事件）
 						translateRes := processTranslate(queryText)
 						slog.Info("流式翻译完成，结果长度", slog.Int("len", len(translateRes)))
-					} else {
-						// 普通翻译：翻译后发送完整结果
-						translateRes := processTranslate(queryText)
-						sendResult(translateRes, "")
 					}
 				}
 			}

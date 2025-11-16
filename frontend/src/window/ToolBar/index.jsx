@@ -4,7 +4,7 @@ import { HeartIcon } from './HeartIcon';
 import { CameraIcon } from './CameraIcon';
 import { BsTranslate } from "react-icons/bs";
 import { MdContentCopy, MdVolumeUp, MdPushPin, MdOutlinePushPin, MdLightbulb } from "react-icons/md";
-import { ToolBarShow, Show, Hide, SetToolBarPinned, GetToolBarPinned, TranslateStream, Translate, TranslateMeanings, ExplainStream, GetExplainTemplates, SetDefaultExplainTemplate } from "../../../bindings/handy-translate/app";
+import { ToolBarShow, Show, Hide, SetToolBarPinned, GetToolBarPinned, Translate, TranslateMeanings, GetToolbarMode, GetExplainTemplates, SetDefaultExplainTemplate } from "../../../bindings/handy-translate/app";
 import { lingva_tts } from "../../services/tts";
 import { useVoice } from "../../hooks/useVoice";
 import { Events, Window } from "@wailsio/runtime";
@@ -74,7 +74,7 @@ export default function ToolBar() {
     const contentRef = useRef(); // 实际内容容器的引用
     const { t } = useTranslation(); // 国际化
 
-    // 初始化时从后端获取固定状态和模板列表
+    // 初始化时从后端获取固定状态、模式和模板列表
     useEffect(() => {
         GetToolBarPinned().then(pinned => {
             console.log('从后端获取工具栏固定状态:', pinned)
@@ -85,6 +85,17 @@ export default function ToolBar() {
             }
         }).catch(err => {
             console.error('获取固定状态失败:', err)
+        })
+
+        // 获取工具栏模式
+        GetToolbarMode().then(mode => {
+            console.log('从后端获取工具栏模式:', mode)
+            if (mode) {
+                setMode(mode)
+                modeRef.current = mode
+            }
+        }).catch(err => {
+            console.error('获取工具栏模式失败:', err)
         })
 
         // 获取解释模板列表
@@ -113,6 +124,20 @@ export default function ToolBar() {
         }).catch(err => {
             console.error('获取解释模板失败:', err)
         })
+
+        // 监听后端推送的模式更新
+        const unsubscribeModeUpdated = Events.On("toolbarModeUpdated", function (data) {
+            const newMode = typeof data.data === 'string' ? data.data : String(data.data || '')
+            console.log('收到工具栏模式更新:', newMode)
+            if (newMode) {
+                setMode(newMode)
+                modeRef.current = newMode
+            }
+        })
+
+        return () => {
+            if (unsubscribeModeUpdated) unsubscribeModeUpdated()
+        }
     }, [])
 
     // 检测是否为单个单词
@@ -417,14 +442,7 @@ export default function ToolBar() {
                 }
             }
 
-            // 如果是解释模式，前端主动调用 ExplainStream（使用当前选中的模板）
-            // 使用 ref 获取最新的值，避免闭包问题
-            if (modeRef.current === 'explain') {
-                const templateId = selectedTemplateRef.current || defaultTemplate || ''
-                console.log('解释模式，主动调用 ExplainStream，templateID:', templateId, '当前 mode:', modeRef.current)
-                await ExplainStream(text, templateId)
-            }
-            // 翻译模式由后端自动处理
+            // 后端会根据保存的模式自动处理translate/explain，无需前端调用
         })
 
         // 监听流式翻译结果
@@ -850,7 +868,7 @@ export default function ToolBar() {
                         onSelectionChange={async (key) => {
                             setMode(key)
                             modeRef.current = key // 同步更新 ref
-                            // 通知后端更新模式
+                            // 通知后端更新模式（后端会自动保存并处理）
                             Events.Emit({ name: "toolbarMode", data: key })
 
                             // 切换模式后，如果有queryText，重新调用对应API
@@ -860,19 +878,8 @@ export default function ToolBar() {
                                 setResultStream('')
                                 setResultMeaningsStream('')
                                 streamBufferRef.current = ''
-
-                                if (key === 'translate') {
-                                    console.log('切换到翻译模式，调用 TranslateStream')
-                                    // 默认使用 auto 和 zh
-                                    await TranslateStream(queryText, 'auto', 'zh')
-                                } else if (key === 'explain') {
-                                    console.log('切换到解释模式，调用 ExplainStream')
-                                    console.log('selectedTemplate:', selectedTemplate, 'defaultTemplate:', defaultTemplate)
+                                if (key === 'explain') {
                                     setWordDetails(null)
-                                    // 使用选中的模板ID，如果没有则使用默认模板
-                                    const templateId = selectedTemplate || defaultTemplate || ''
-                                    console.log('使用的 templateID:', templateId)
-                                    await ExplainStream(queryText, templateId)
                                 }
                             }
                         }}
@@ -921,15 +928,21 @@ export default function ToolBar() {
                                     setSelectedTemplate(newTemplateId)
                                     selectedTemplateRef.current = newTemplateId // 同步更新 ref
 
-                                    // 切换模板后，如果有查询文本，重新解释
+                                    // 更新默认模板到后端（这样下次查询时会使用新模板）
+                                    try {
+                                        await SetDefaultExplainTemplate(newTemplateId)
+                                        console.log('默认模板已更新:', newTemplateId)
+                                    } catch (err) {
+                                        console.error('更新默认模板失败:', err)
+                                    }
+
+                                    // 切换模板后，如果有查询文本，清空结果等待下次查询
+                                    // 注意：当前查询不会立即使用新模板，需要重新触发查询
                                     if (queryText && queryText.trim() !== '') {
-                                        setIsLoading(true)
                                         setResult('')
                                         setResultStream('')
                                         setResultMeaningsStream('')
                                         streamBufferRef.current = ''
-                                        console.log('调用 ExplainStream，queryText:', queryText, 'templateID:', newTemplateId)
-                                        await ExplainStream(queryText, newTemplateId)
                                     }
                                 }}
                                 className="max-h-[40vh] overflow-y-auto"
@@ -1010,25 +1023,35 @@ export default function ToolBar() {
                                 <ReactMarkdown
                                     components={{
                                         // 自定义样式组件
-                                        h1: ({node, ...props}) => <h1 className="text-2xl font-bold mb-3 mt-4" {...props} />,
-                                        h2: ({node, ...props}) => <h2 className="text-xl font-bold mb-2 mt-3" {...props} />,
-                                        h3: ({node, ...props}) => <h3 className="text-lg font-bold mb-2 mt-3" {...props} />,
-                                        h4: ({node, ...props}) => <h4 className="text-base font-bold mb-1 mt-2" {...props} />,
-                                        p: ({node, ...props}) => <p className="mb-3 leading-relaxed" {...props} />,
-                                        ul: ({node, ...props}) => <ul className="list-disc list-inside mb-3 space-y-1 ml-4" {...props} />,
-                                        ol: ({node, ...props}) => <ol className="list-decimal list-inside mb-3 space-y-1 ml-4" {...props} />,
-                                        li: ({node, ...props}) => <li className="leading-relaxed" {...props} />,
-                                        code: ({node, inline, ...props}) => 
+                                        h1: ({ node, ...props }) => <h1 className="text-2xl font-bold mb-3 mt-4" {...props} />,
+                                        h2: ({ node, ...props }) => <h2 className="text-xl font-bold mb-2 mt-3" {...props} />,
+                                        h3: ({ node, ...props }) => <h3 className="text-lg font-bold mb-2 mt-3" {...props} />,
+                                        h4: ({ node, ...props }) => <h4 className="text-base font-bold mb-1 mt-2" {...props} />,
+                                        p: ({ node, ...props }) => <p className="mb-3 leading-relaxed break-words" style={{ wordBreak: 'break-word', overflowWrap: 'break-word' }} {...props} />,
+                                        ul: ({ node, ...props }) => <ul className="list-disc list-inside mb-3 space-y-1 ml-4" {...props} />,
+                                        ol: ({ node, ...props }) => <ol className="list-decimal list-inside mb-3 space-y-1 ml-4" {...props} />,
+                                        li: ({ node, ...props }) => <li className="leading-relaxed" {...props} />,
+                                        code: ({ node, inline, ...props }) =>
                                             inline ? (
-                                                <code className="bg-gray-100 text-red-600 px-1.5 py-0.5 rounded text-sm font-mono" {...props} />
+                                                <code
+                                                    className="bg-gray-100 text-red-600 px-1.5 py-0.5 rounded text-sm font-mono"
+                                                    style={{
+                                                        display: 'inline',
+                                                        whiteSpace: 'nowrap',
+                                                        wordBreak: 'keep-all',
+                                                        overflowWrap: 'normal',
+                                                        unicodeBidi: 'isolate'
+                                                    }}
+                                                    {...props}
+                                                />
                                             ) : (
                                                 <code className="block bg-gray-100 text-gray-800 p-3 rounded mb-3 overflow-x-auto font-mono text-sm whitespace-pre" {...props} />
                                             ),
-                                        pre: ({node, ...props}) => <pre className="bg-gray-100 p-3 rounded mb-3 overflow-x-auto" {...props} />,
-                                        blockquote: ({node, ...props}) => <blockquote className="border-l-4 border-gray-300 pl-4 italic my-3 text-gray-700" {...props} />,
-                                        strong: ({node, ...props}) => <strong className="font-bold" {...props} />,
-                                        em: ({node, ...props}) => <em className="italic" {...props} />,
-                                        hr: ({node, ...props}) => <hr className="my-4 border-gray-300" {...props} />,
+                                        pre: ({ node, ...props }) => <pre className="bg-gray-100 p-3 rounded mb-3 overflow-x-auto" {...props} />,
+                                        blockquote: ({ node, ...props }) => <blockquote className="border-l-4 border-gray-300 pl-4 italic my-3 text-gray-700" {...props} />,
+                                        strong: ({ node, ...props }) => <strong className="font-bold" {...props} />,
+                                        em: ({ node, ...props }) => <em className="italic" {...props} />,
+                                        hr: ({ node, ...props }) => <hr className="my-4 border-gray-300" {...props} />,
                                     }}
                                 >
                                     {resultStream || result}

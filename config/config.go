@@ -13,15 +13,16 @@ import (
 // Data config
 var Data config
 
-type (
-	config struct {
-		Appname         string                    `toml:"appname"`
-		Keyboards       map[string][]string       `toml:"keyboards"`
-		TranslateWay    string                    `toml:"translate_way"`
-		Translate       map[string]Translate      `toml:"translate"`
-		ExplainTemplates ExplainTemplatesConfig   `toml:"explain_templates"`
-		History         HistoryConfig             `toml:"history"`
-	}
+	type (
+		config struct {
+			Appname         string                    `toml:"appname"`
+			Keyboards       map[string][]string       `toml:"keyboards"`
+			TranslateWay    string                    `toml:"translate_way"`
+			Translate       map[string]Translate      `toml:"translate"`
+			ExplainTemplates ExplainTemplatesConfig   `toml:"explain_templates"`
+			History         HistoryConfig             `toml:"history"`
+			ToolbarMode     string                    `toml:"toolbar_mode"`
+		}
 
 	Translate struct {
 		Name  string `toml:"name" json:"name,omitempty"`

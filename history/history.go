@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"handy-translate/config"
+	"handy-translate/window/toolbar"
 
 	"github.com/google/uuid"
 )
@@ -69,7 +70,7 @@ func (h *HistoryService) SaveExplainRecord(sourceText, result, templateID string
 
 	record := &HistoryRecord{
 		ID:         uuid.New().String(),
-		Type:       "explain",
+		Type:       toolbar.ExplainMode,
 		SourceText: sourceText,
 		Result:     result, // 解释类型不保存结果
 		TemplateID: templateID,
@@ -77,7 +78,7 @@ func (h *HistoryService) SaveExplainRecord(sourceText, result, templateID string
 	}
 
 	date := record.Timestamp.Format("2006-01-02")
-	filePath := path.Join(h.storagePath, "history", "explain", date+".json")
+	filePath := path.Join(h.storagePath, "history", toolbar.ExplainMode, date+".json")
 
 	h.appendToFile(filePath, record)
 	fmt.Printf("解释历史记录已保存，ID: %s，词语: %s\n", record.ID, sourceText)

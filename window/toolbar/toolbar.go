@@ -13,6 +13,11 @@ var WindowName = "ToolBar"
 
 var Window *application.WebviewWindow
 
+const (
+	ExplainMode   = "explain"
+	TranslateMode = "translate"
+)
+
 var IsPinned = false            // 窗口固定状态
 var QueryResultHeight int = 110 // 高度
 var QueryResultWidth int = 450  // 宽度

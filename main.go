@@ -10,6 +10,7 @@ import (
 
 	"handy-translate/config"
 	"handy-translate/history"
+	"handy-translate/translate_service"
 	"handy-translate/window/screenshot"
 	"handy-translate/window/toolbar"
 	"handy-translate/window/translate"
@@ -78,6 +79,44 @@ func main() {
 		if mode, ok := event.Data.(string); ok {
 			SetToolbarMode(mode)
 			app.Logger.Info("toolbarMode 已更新", slog.String("mode", mode))
+			// 推送模式更新到前端
+			app.Event.Emit("toolbarModeUpdated", mode)
+
+			// 如果有当前的 queryText，自动重新处理
+			currentQueryText := translate_service.GetQueryText()
+			if currentQueryText != "" {
+				app.Logger.Info("模式切换，重新处理当前查询",
+					slog.String("queryText", currentQueryText),
+					slog.String("mode", mode))
+
+				// 发送 query 事件让前端准备
+				app.Event.Emit("query", currentQueryText)
+
+				// 根据新模式自动处理
+				if mode == toolbar.ExplainMode {
+					// 解释模式
+					templateID := config.Data.ExplainTemplates.DefaultTemplate
+					if templateID == "" {
+						// 如果没有默认模板，尝试使用第一个模板
+						for id := range config.Data.ExplainTemplates.Templates {
+							templateID = id
+							break
+						}
+					}
+					if templateID == "" {
+						slog.Error("解释模式但未找到模板")
+						app.Event.Emit("result_stream_error", "未找到解释模板")
+					} else {
+						slog.Info("模式切换后自动解释", slog.String("templateID", templateID))
+						explainRes := processExplain(currentQueryText, templateID)
+						slog.Info("模式切换后流式解释完成", slog.Int("len", len(explainRes)))
+					}
+				} else {
+					// 翻译模式
+					translateRes := processTranslate(currentQueryText)
+					slog.Info("模式切换后流式翻译完成", slog.Int("len", len(translateRes)))
+				}
+			}
 		}
 	})
 
@@ -118,6 +157,16 @@ func main() {
 
 	// 初始化文件和鼠标事件
 	config.Init(projectName)
+
+	// 从配置读取工具栏模式
+	if config.Data.ToolbarMode != "" {
+		SetToolbarMode(config.Data.ToolbarMode)
+		app.Logger.Info("从配置读取工具栏模式", slog.String("mode", config.Data.ToolbarMode))
+	} else {
+		// 如果配置中没有模式，使用默认值并保存
+		SetToolbarMode("translate")
+		app.Logger.Info("使用默认工具栏模式", slog.String("mode", "translate"))
+	}
 
 	// 初始化历史记录服务
 	history.GlobalHistoryService = history.NewHistoryService()
