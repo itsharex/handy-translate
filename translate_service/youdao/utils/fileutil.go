@@ -14,7 +14,7 @@ func SaveFile(path string, data []byte, needDecode bool) {
 		data, _ = base64util.StdEncoding.DecodeString(base64)
 	}
 	if err != nil {
-		slog.Error("file create failed. err: ", err)
+		slog.Error("file create failed", slog.Any("err", err))
 		return
 	}
 	file.Write(data)
@@ -23,13 +23,13 @@ func SaveFile(path string, data []byte, needDecode bool) {
 func ReadFileAsBase64(path string) (string, error) {
 	file, err := os.Open(path)
 	if err != nil {
-		slog.Error("file read failed. err: ", err)
+		slog.Error("file read failed", slog.Any("err", err))
 		return "", err
 	}
 
 	fd, err := ioutil.ReadAll(file)
 	if err != nil {
-		slog.Error("file read failed. err: ", err)
+		slog.Error("file read failed", slog.Any("err", err))
 		return "", err
 	}
 

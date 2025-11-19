@@ -20,7 +20,6 @@ import (
 	"handy-translate/window/toolbar"
 	"handy-translate/window/translate"
 
-	"github.com/sirupsen/logrus"
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
@@ -202,7 +201,7 @@ func (a *App) GetTranslateMap() string {
 	translateList := config.Data.Translate
 	bTranslate, err := json.Marshal(translateList)
 	if err != nil {
-		logrus.WithError(err).Error("Marshal")
+		slog.Error("Marshal", slog.Any("error", err))
 	}
 	return string(bTranslate)
 }
@@ -210,7 +209,7 @@ func (a *App) GetTranslateMap() string {
 // SetTranslateWay 设置当前翻译服务
 func (a *App) SetTranslateWay(translateWay string) {
 	config.Data.TranslateWay = translateWay
-	translate_service.SetQueryText("")
+	// translate_service.SetQueryText("") // Removed global state modification
 	if err := config.Save(); err != nil {
 		slog.Error("Failed to save config", slog.String("error", err.Error()))
 	}
@@ -247,7 +246,7 @@ func (a *App) GetExplainTemplates() string {
 
 	b, err := json.Marshal(result)
 	if err != nil {
-		logrus.WithError(err).Error("Marshal ExplainTemplates")
+		slog.Error("Marshal ExplainTemplates", slog.Any("error", err))
 		return "{}"
 	}
 	return string(b)
@@ -592,9 +591,8 @@ func processHook() {
 				processToolbarShow()
 			}
 
-			if queryText != translate_service.GetQueryText() && queryText != "" {
-				translate_service.SetQueryText(queryText)
-
+			// 直接使用 queryText 变量，不通过 GetQueryText/SetQueryText
+			if queryText != "" {
 				// 检查是否使用了流式翻译
 				translateWay := translate_service.GetTranslateWay(config.Data.TranslateWay)
 

@@ -3,11 +3,11 @@ package config
 import (
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"strings"
 
 	"github.com/pelletier/go-toml/v2"
-	"github.com/sirupsen/logrus"
 )
 
 // Data config
@@ -55,19 +55,19 @@ func Init(projectName string) {
 
 	configFile, err := os.Open(configPath + "/config.toml")
 	if err != nil {
-		logrus.WithError(err).Error("打开配置文件失败，将使用默认配置")
+		slog.Error("打开配置文件失败，将使用默认配置", slog.Any("error", err))
 		return // ← 改为 return，而不是 os.Exit(1)，允许应用继续运行
 	}
 	defer configFile.Close()
 
 	fd, err := io.ReadAll(configFile)
 	if err != nil {
-		logrus.WithError(err).Error("读取配置文件失败")
+		slog.Error("读取配置文件失败", slog.Any("error", err))
 		return // ← 改为 return
 	}
 	err = toml.Unmarshal(fd, &Data)
 	if err != nil {
-		logrus.WithError(err).Error("解析配置文件失败")
+		slog.Error("解析配置文件失败", slog.Any("error", err))
 		return // ← 改为 return
 	}
 
@@ -81,7 +81,7 @@ func Save() error {
 	filePath := "./config.toml"
 	data, err := toml.Marshal(&Data)
 	if err != nil {
-		logrus.WithError(err).Error("Marshal config failed")
+		slog.Error("Marshal config failed", slog.Any("error", err))
 		return fmt.Errorf("marshal config: %w", err)
 	}
 
@@ -92,7 +92,7 @@ func Save() error {
 	// 创建临时文件
 	file, err := os.Create(tempFilePath)
 	if err != nil {
-		logrus.WithError(err).Error("Create temp config file failed")
+		slog.Error("Create temp config file failed", slog.Any("error", err))
 		return fmt.Errorf("create temp file: %w", err)
 	}
 
@@ -101,7 +101,7 @@ func Save() error {
 	if err != nil {
 		file.Close()
 		os.Remove(tempFilePath) // 清理临时文件
-		logrus.WithError(err).Error("Write config failed")
+		slog.Error("Write config failed", slog.Any("error", err))
 		return fmt.Errorf("write config: %w", err)
 	}
 
@@ -109,7 +109,7 @@ func Save() error {
 	if err := file.Sync(); err != nil {
 		file.Close()
 		os.Remove(tempFilePath)
-		logrus.WithError(err).Error("Sync config failed")
+		slog.Error("Sync config failed", slog.Any("error", err))
 		return fmt.Errorf("sync config: %w", err)
 	}
 
@@ -118,10 +118,10 @@ func Save() error {
 	// 原子性地重命名临时文件为目标文件
 	if err := os.Rename(tempFilePath, filePath); err != nil {
 		os.Remove(tempFilePath) // 清理临时文件
-		logrus.WithError(err).Error("Rename config file failed")
+		slog.Error("Rename config file failed", slog.Any("error", err))
 		return fmt.Errorf("rename config file: %w", err)
 	}
 
-	logrus.Info("Config saved successfully")
+	slog.Info("Config saved successfully")
 	return nil
 }

@@ -5,13 +5,12 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"os"
 	"os/exec"
 	"runtime"
 	"strings"
 	"syscall"
-
-	"github.com/sirupsen/logrus"
 )
 
 func ExecOCR(path, image string) string {
@@ -27,14 +26,14 @@ func ExecOCR(path, image string) string {
 	// 使用结构体中的信息执行外部程序
 	output, err := runExternalProgram(program)
 	if err != nil {
-		logrus.Error("执行外部程序时发生错误：", err)
+		slog.Error("执行外部程序时发生错误", slog.Any("error", err))
 		return ""
 	}
-	logrus.Info(string(output))
+	slog.Info(string(output))
 	// 查找第一个左大括号的位置
 	startIndex := strings.Index(string(output), "{")
 	if startIndex == -1 {
-		logrus.Error("无法找到 JSON 数据的起始位置")
+		slog.Error("无法找到 JSON 数据的起始位置")
 		return ""
 	}
 
@@ -44,7 +43,7 @@ func ExecOCR(path, image string) string {
 	// 解析 JSON 数据
 	var result OCRResult
 	if err := json.Unmarshal([]byte(jsonStr), &result); err != nil {
-		logrus.Error("解析输出结果时发生错误：", err)
+		slog.Error("解析输出结果时发生错误", slog.Any("error", err))
 		return ""
 	}
 

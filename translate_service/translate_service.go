@@ -1,8 +1,6 @@
 package translate_service
 
 import (
-	"sync"
-
 	"handy-translate/config"
 	"handy-translate/translate_service/baidu"
 	"handy-translate/translate_service/caiyun"
@@ -62,20 +60,5 @@ func GetTranslateWay(way string) Translate {
 	return t
 }
 
-var queryText string
-
-var lk sync.RWMutex
-
-// SetQueryText
-func SetQueryText(value string) {
-	lk.Lock()
-	queryText = value
-	lk.Unlock()
-}
-
-// GetQueryText
-func GetQueryText() string {
-	lk.RLock()
-	defer lk.RUnlock()
-	return queryText
-}
+// Removed global queryText and lk
+// State should be managed by the caller (e.g., in app.go)

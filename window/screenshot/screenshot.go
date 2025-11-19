@@ -53,7 +53,7 @@ func ScreenshotFullScreen() string {
 
 	if err != nil {
 		// 错误处理，输出错误信息并返回
-		slog.Error("Error capturing screenshot:", err)
+		slog.Error("Error capturing screenshot", slog.Any("err", err))
 		return ""
 	}
 	ScreenshotImg = img
