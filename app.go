@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 
 	"handy-translate/config"
@@ -24,6 +25,26 @@ import (
 )
 
 var toolbarIsShowing bool = false // 标记工具栏是否已经显示
+
+// 全局状态管理 currentQueryText
+var (
+	currentQueryText string
+	queryTextMu      sync.RWMutex
+)
+
+// setCurrentQueryText 设置当前的查询文本
+func setCurrentQueryText(text string) {
+	queryTextMu.Lock()
+	defer queryTextMu.Unlock()
+	currentQueryText = text
+}
+
+// getCurrentQueryText 获取当前的查询文本
+func getCurrentQueryText() string {
+	queryTextMu.RLock()
+	defer queryTextMu.RUnlock()
+	return currentQueryText
+}
 
 // 和js绑定的go方法集合
 type AppInterface interface {
@@ -420,6 +441,9 @@ func (a *App) CaptureSelectedScreen(startX, startY, width, height float64) {
 	// OCR解析文本
 	queryText := ExecOCR(".\\RapidOCR-json.exe", filename)
 
+	// 更新全局 queryText 状态
+	setCurrentQueryText(queryText)
+
 	// 重置工具栏状态，准备新的翻译
 	ResetToolbarState()
 
@@ -593,6 +617,9 @@ func processHook() {
 
 			// 直接使用 queryText 变量，不通过 GetQueryText/SetQueryText
 			if queryText != "" {
+				// 更新全局 queryText 状态
+				setCurrentQueryText(queryText)
+
 				// 检查是否使用了流式翻译
 				translateWay := translate_service.GetTranslateWay(config.Data.TranslateWay)
 

@@ -82,11 +82,40 @@ func main() {
 			app.Event.Emit("toolbarModeUpdated", mode)
 
 			// 如果有当前的 queryText，自动重新处理
-			// currentQueryText := translate_service.GetQueryText() // Removed global state access
-			// if currentQueryText != "" { ... }
-			// 注意：由于移除了全局状态，这里无法直接获取上次的 queryText。
-			// 如果需要此功能，App 结构体应该维护状态。
-			// 暂时忽略此逻辑，因为主要触发点是 processHook
+			currentQueryText := getCurrentQueryText()
+			if currentQueryText != "" {
+				app.Logger.Info("模式切换，重新处理当前查询",
+					slog.String("queryText", currentQueryText),
+					slog.String("mode", mode))
+
+				// 发送 query 事件让前端准备
+				app.Event.Emit("query", currentQueryText)
+
+				// 根据新模式自动处理
+				if mode == toolbar.ExplainMode {
+					// 解释模式
+					templateID := config.Data.ExplainTemplates.DefaultTemplate
+					if templateID == "" {
+						// 如果没有默认模板，尝试使用第一个模板
+						for id := range config.Data.ExplainTemplates.Templates {
+							templateID = id
+							break
+						}
+					}
+					if templateID == "" {
+						slog.Error("解释模式但未找到模板")
+						app.Event.Emit("result_stream_error", "未找到解释模板")
+					} else {
+						slog.Info("模式切换后自动解释", slog.String("templateID", templateID))
+						explainRes := processExplain(currentQueryText, templateID)
+						slog.Info("模式切换后流式解释完成", slog.Int("len", len(explainRes)))
+					}
+				} else {
+					// 翻译模式
+					translateRes := processTranslate(currentQueryText)
+					slog.Info("模式切换后流式翻译完成", slog.Int("len", len(translateRes)))
+				}
+			}
 		}
 	})
 
