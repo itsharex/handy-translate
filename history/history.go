@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"sync"
 	"time"
 
 	"handy-translate/config"
@@ -29,6 +30,7 @@ type HistoryRecord struct {
 type HistoryService struct {
 	enabled     bool
 	storagePath string
+	mu          sync.Mutex // 互斥锁，保证并发写入安全
 }
 
 // NewHistoryService 创建历史记录服务实例
@@ -86,6 +88,9 @@ func (h *HistoryService) SaveExplainRecord(sourceText, result, templateID string
 
 // appendToFile 将记录追加到文件
 func (h *HistoryService) appendToFile(filePath string, record *HistoryRecord) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
 	// 确保目录存在
 	err := os.MkdirAll(path.Dir(filePath), 0755)
 	if err != nil {

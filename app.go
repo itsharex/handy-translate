@@ -12,6 +12,7 @@ import (
 
 	"handy-translate/config"
 	"handy-translate/history"
+	"handy-translate/logger"
 	"handy-translate/os_api/windows"
 	"handy-translate/translate_service"
 	"handy-translate/utils"
@@ -37,6 +38,19 @@ type AppInterface interface {
 // App is a service
 type App struct{}
 
+// truncateText 截断文本用于日志显示，超长文本显示前N个字符后跟...
+func truncateText(text string, maxLen int) string {
+	if len(text) <= maxLen {
+		return text
+	}
+	// 如果是中文字符，需要特殊处理以避免切割中文字符
+	runes := []rune(text)
+	if len(runes) <= maxLen {
+		return text
+	}
+	return string(runes[:maxLen]) + "..."
+}
+
 // GetToolbarMode 获取工具栏模式
 func GetToolbarMode() string {
 	return config.Data.ToolbarMode
@@ -45,7 +59,9 @@ func GetToolbarMode() string {
 // SetToolbarMode 设置工具栏模式
 func SetToolbarMode(mode string) {
 	config.Data.ToolbarMode = mode
-	config.Save()
+	if err := config.Save(); err != nil {
+		slog.Error("Failed to save config", slog.String("error", err.Error()))
+	}
 	slog.Info("SetToolbarMode", slog.String("mode", mode))
 }
 
@@ -61,10 +77,10 @@ func (a *App) MyFetch(URL string, content map[string]interface{}) interface{} {
 
 // Translate 翻译逻辑
 func (a *App) Translate(queryText, fromLang, toLang string) string {
-	app.Logger.Info("Translate",
-		slog.Any("queryText", queryText),
-		slog.Any("toLang", toLang),
-		slog.Any("fromLang", fromLang))
+	app.Logger.Info("🔍 Translate 开始",
+		slog.String("text_preview", truncateText(queryText, 50)),
+		slog.String("from", fromLang),
+		slog.String("to", toLang))
 
 	res := processTranslate(queryText)
 	return res
@@ -72,26 +88,34 @@ func (a *App) Translate(queryText, fromLang, toLang string) string {
 
 // TranslateMeanings 翻译逻辑
 func (a *App) TranslateMeanings(queryText, fromLang, toLang string) string {
-	app.Logger.Info("TranslateMeanings",
-		slog.Any("queryText", queryText),
-		slog.Any("toLang", toLang),
-		slog.Any("fromLang", fromLang))
+	app.Logger.Info("🔍 TranslateMeanings 开始",
+		slog.String("text_preview", truncateText(queryText, 50)),
+		slog.String("from", fromLang),
+		slog.String("to", toLang))
 
 	translateWay := translate_service.GetTranslateWay(config.Data.TranslateWay)
 
 	// 检查是否支持流式输出
 	if streamTranslate, ok := translateWay.(translate_service.StreamTranslate); ok {
 		// 支持流式输出
-		slog.Info("使用流式翻译")
-		var streamResult string
+		logger.LogTranslateStart(translateWay.GetName(), fromLang, toLang, len(queryText))
+
+		var streamResult strings.Builder
+		chunkCount := 0
+		startTime := time.Now()
+
 		err := streamTranslate.PostQueryStream(queryText, fromLang, toLang, func(chunk string) {
-			streamResult += chunk
+			streamResult.WriteString(chunk)
+			chunkCount++
+			totalLen := len(streamResult.String())
+
 			// 每次收到数据块时发送事件到前端
-			slog.Info("发送流式数据块", slog.String("chunk", chunk), slog.Int("length", len(chunk)))
+			logger.LogChunkReceived(chunkCount, len(chunk), totalLen)
 			app.Event.Emit("result_meanings_stream", chunk)
 		})
 		if err != nil {
-			slog.Error("PostQueryStream", slog.Any("err", err))
+			elapsed := time.Since(startTime)
+			logger.LogTranslateError(translateWay.GetName(), err, chunkCount, elapsed)
 			app.Event.Emit("result_stream_error", err.Error())
 			return ""
 		}
@@ -99,22 +123,23 @@ func (a *App) TranslateMeanings(queryText, fromLang, toLang string) string {
 		// 发送完成事件
 		app.Event.Emit("result_stream_done", "done")
 
-		app.Logger.Info("流式翻译完成",
-			slog.String("result", streamResult),
-			slog.String("translateWay", translateWay.GetName()))
+		resultStr := streamResult.String()
+		elapsed := time.Since(startTime)
 
-		return streamResult
+		logger.LogTranslateSuccess(translateWay.GetName(), len(queryText), len(resultStr), chunkCount, elapsed)
+
+		return resultStr
 	}
 
 	// 不支持流式，使用普通翻译
+	logger.LogNormalTranslateStart(translateWay.GetName(), fromLang, toLang)
+
 	result, err := translateWay.PostQuery(queryText, fromLang, toLang)
 	if err != nil {
-		slog.Error("PostQuery", slog.Any("err", err))
+		logger.LogNormalTranslateError(translateWay.GetName(), err)
 	}
 
-	app.Logger.Info("Translate",
-		slog.Any("result", result),
-		slog.Any("translateWay", translateWay.GetName()))
+	logger.LogNormalTranslateSuccess(translateWay.GetName(), len(result))
 
 	translateRes := strings.Join(result, "\n")
 
@@ -128,33 +153,45 @@ func (a *App) TranslateMeanings(queryText, fromLang, toLang string) string {
 
 // TranslateStream 流式翻译逻辑（仅支持 DeepSeek）
 func (a *App) TranslateStream(queryText, fromLang, toLang string) {
-	app.Logger.Info("TranslateStream",
-		slog.Any("queryText", queryText),
-		slog.Any("toLang", toLang),
-		slog.Any("fromLang", fromLang))
+	app.Logger.Info("🔍 TranslateStream 开始",
+		slog.String("text_preview", truncateText(queryText, 50)),
+		slog.String("from", fromLang),
+		slog.String("to", toLang))
 
 	translateWay := translate_service.GetTranslateWay(config.Data.TranslateWay)
 
 	// 检查是否支持流式输出
 	if streamTranslate, ok := translateWay.(translate_service.StreamTranslate); ok {
 		// 支持流式输出
-		slog.Info("使用流式翻译")
+		logger.LogTranslateStart(translateWay.GetName(), fromLang, toLang, len(queryText))
+
+		chunkCount := 0
+		startTime := time.Now()
+
 		err := streamTranslate.PostQueryStream(queryText, fromLang, toLang, func(chunk string) {
+			chunkCount++
+
 			// 每次收到数据块时发送事件到前端
-			slog.Info("发送流式数据块", slog.String("chunk", chunk), slog.Int("length", len(chunk)))
+			slog.Debug("📥 接收流式数据块",
+				slog.Int("chunk_count", chunkCount),
+				slog.Int("chunk_size", len(chunk)))
 			app.Event.Emit("result_stream", chunk)
 		})
 
 		if err != nil {
-			slog.Error("PostQueryStream", slog.Any("err", err))
+			elapsed := time.Since(startTime)
+			logger.LogTranslateError(translateWay.GetName(), err, chunkCount, elapsed)
 			// 发送错误事件
 			app.Event.Emit("result_stream_error", err.Error())
 		} else {
 			// 发送完成事件
+			elapsed := time.Since(startTime)
+			logger.LogTranslateSuccess(translateWay.GetName(), len(queryText), 0, chunkCount, elapsed)
 			app.Event.Emit("result_stream_done", "done")
 		}
 	} else {
 		// 不支持流式输出，使用普通翻译
+		logger.LogStreamNotSupported(translateWay.GetName())
 		res := processTranslate(queryText)
 		app.Event.Emit("result", res)
 	}
@@ -174,7 +211,9 @@ func (a *App) GetTranslateMap() string {
 func (a *App) SetTranslateWay(translateWay string) {
 	config.Data.TranslateWay = translateWay
 	translate_service.SetQueryText("")
-	config.Save()
+	if err := config.Save(); err != nil {
+		slog.Error("Failed to save config", slog.String("error", err.Error()))
+	}
 	slog.Info("SetTranslateList", slog.Any("config.Data.Translate", config.Data.Translate))
 }
 
@@ -217,7 +256,9 @@ func (a *App) GetExplainTemplates() string {
 // SetDefaultExplainTemplate 设置默认解释模板
 func (a *App) SetDefaultExplainTemplate(templateID string) {
 	config.Data.ExplainTemplates.DefaultTemplate = templateID
-	config.Save()
+	if err := config.Save(); err != nil {
+		slog.Error("Failed to save config", slog.String("error", err.Error()))
+	}
 	slog.Info("SetDefaultExplainTemplate", slog.String("templateID", templateID))
 }
 
@@ -298,7 +339,7 @@ func processToolbarShow() {
 
 	// 如果窗口已经显示，只调整大小，不改变位置
 	if toolbarIsShowing {
-		slog.Info("工具栏已显示，仅调整大小", slog.Int("height", height))
+		// slog.Info("工具栏已显示，仅调整大小", slog.Int("height", height))
 		// 窗口已经显示，不需要重新定位
 		return
 	}
@@ -347,7 +388,6 @@ func processToolbarShow() {
 
 	// 标记窗口已显示
 	toolbarIsShowing = true
-	slog.Info("工具栏已显示并标记")
 }
 
 // ResetToolbarState 重置工具栏状态（在窗口隐藏时调用）
@@ -408,16 +448,24 @@ func processTranslate(queryText string) string {
 	// 检查是否支持流式输出
 	if streamTranslate, ok := translateWay.(translate_service.StreamTranslate); ok {
 		// 支持流式输出
-		slog.Info("使用流式翻译")
-		var streamResult string
+		logger.LogTranslateStart(translateWay.GetName(), fromLang, toLang, len(queryText))
+
+		var streamResult strings.Builder
+		chunkCount := 0
+		startTime := time.Now()
+
 		err := streamTranslate.PostQueryStream(queryText, fromLang, toLang, func(chunk string) {
-			streamResult += chunk
+			streamResult.WriteString(chunk)
+			chunkCount++
+			totalLen := len(streamResult.String())
+
 			// 每次收到数据块时发送事件到前端
-			slog.Info("发送流式数据块", slog.String("chunk", chunk), slog.Int("length", len(chunk)))
+			logger.LogChunkReceived(chunkCount, len(chunk), totalLen)
 			app.Event.Emit("result_stream", chunk)
 		})
 		if err != nil {
-			slog.Error("PostQueryStream", slog.Any("err", err))
+			elapsed := time.Since(startTime)
+			logger.LogTranslateError(translateWay.GetName(), err, chunkCount, elapsed)
 			app.Event.Emit("result_stream_error", err.Error())
 			return ""
 		}
@@ -425,27 +473,28 @@ func processTranslate(queryText string) string {
 		// 发送完成事件
 		app.Event.Emit("result_stream_done", "done")
 
-		app.Logger.Info("流式翻译完成",
-			slog.String("result", streamResult),
-			slog.String("translateWay", translateWay.GetName()))
+		resultStr := streamResult.String()
+		elapsed := time.Since(startTime)
+
+		logger.LogTranslateSuccess(translateWay.GetName(), len(queryText), len(resultStr), chunkCount, elapsed)
 
 		// 保存翻译历史记录
 		if config.Data.History.Enabled {
-			go history.GlobalHistoryService.SaveTranslateRecord(queryText, streamResult, fromLang, toLang)
+			go history.GlobalHistoryService.SaveTranslateRecord(queryText, resultStr, fromLang, toLang)
 		}
 
-		return streamResult
+		return resultStr
 	}
 
 	// 不支持流式，使用普通翻译
+	logger.LogNormalTranslateStart(translateWay.GetName(), fromLang, toLang)
+
 	result, err := translateWay.PostQuery(queryText, fromLang, toLang)
 	if err != nil {
-		slog.Error("PostQuery", slog.Any("err", err))
+		logger.LogNormalTranslateError(translateWay.GetName(), err)
 	}
 
-	app.Logger.Info("Translate",
-		slog.Any("result", result),
-		slog.Any("translateWay", translateWay.GetName()))
+	logger.LogNormalTranslateSuccess(translateWay.GetName(), len(result))
 
 	translateRes := strings.Join(result, "\n")
 
@@ -455,26 +504,32 @@ func processTranslate(queryText string) string {
 	}
 
 	return translateRes
-}
-
-// 解释处理（支持模板选择）
+} // 解释处理（支持模板选择）
 func processExplain(queryText, templateID string) string {
 	translateWay := translate_service.GetTranslateWay(config.Data.TranslateWay)
 
 	// 检查是否支持流式输出
 	if streamTranslate, ok := translateWay.(translate_service.StreamTranslate); ok {
 		// 支持流式输出
-		slog.Info("使用流式解释")
-		var streamResult string
+		logger.LogExplainStart(translateWay.GetName(), templateID, len(queryText))
+
+		var streamResult strings.Builder
+		chunkCount := 0
+		startTime := time.Now()
+
 		err := streamTranslate.PostExplainStream(queryText, templateID, func(chunk string) {
-			streamResult += chunk
+			streamResult.WriteString(chunk)
+			chunkCount++
+			totalLen := len(streamResult.String())
+
 			// 每次收到数据块时发送事件到前端
-			slog.Info("发送流式解释数据块", slog.String("chunk", chunk), slog.Int("length", len(chunk)))
+			logger.LogChunkReceived(chunkCount, len(chunk), totalLen)
 			app.Event.Emit("result_stream", chunk)
 			time.Sleep(time.Millisecond * 20) // 控制发送速度，防止前端卡顿
 		})
 		if err != nil {
-			slog.Error("PostExplainStream", slog.Any("err", err))
+			elapsed := time.Since(startTime)
+			logger.LogExplainError(translateWay.GetName(), templateID, err, chunkCount, elapsed)
 			app.Event.Emit("result_stream_error", err.Error())
 			return ""
 		}
@@ -482,20 +537,21 @@ func processExplain(queryText, templateID string) string {
 		// 发送完成事件
 		app.Event.Emit("result_stream_done", "done")
 
-		app.Logger.Info("流式解释完成",
-			slog.String("result", streamResult),
-			slog.String("translateWay", translateWay.GetName()))
+		resultStr := streamResult.String()
+		elapsed := time.Since(startTime)
+
+		logger.LogExplainSuccess(translateWay.GetName(), templateID, len(queryText), len(resultStr), chunkCount, elapsed)
 
 		// 保存解释历史记录
 		if config.Data.History.Enabled {
-			go history.GlobalHistoryService.SaveExplainRecord(queryText, streamResult, templateID)
+			go history.GlobalHistoryService.SaveExplainRecord(queryText, resultStr, templateID)
 		}
 
-		return streamResult
+		return resultStr
 	}
 
 	// 不支持流式
-	slog.Error("PostExplainStream", slog.String("err", "不支持流式解释"))
+	logger.LogStreamExplainNotSupported(translateWay.GetName(), templateID)
 	return ""
 }
 

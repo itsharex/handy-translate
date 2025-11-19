@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"runtime"
@@ -78,7 +79,11 @@ func runExternalProgram(program ExternalProgram) ([]byte, error) {
 	// 设置标准输入、输出和错误输出，如果需要的话
 	// 创建一个字节缓冲区来捕获输出
 	var outputBuffer bytes.Buffer
+	var stderrBuffer bytes.Buffer // 捕获标准错误
+
 	cmd.Stdout = &outputBuffer
+	cmd.Stderr = &stderrBuffer
+
 	if runtime.GOOS == "windows" {
 		cmd.SysProcAttr = &syscall.SysProcAttr{
 			HideWindow:    true,
@@ -89,11 +94,19 @@ func runExternalProgram(program ExternalProgram) ([]byte, error) {
 	// 启动外部进程
 	err := cmd.Start()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to start command: %w", err)
 	}
 
 	// 等待外部进程完成
 	err = cmd.Wait()
+	if err != nil {
+		// 将 stderr 的内容包含在错误信息中，方便排查
+		stderrStr := stderrBuffer.String()
+		if stderrStr != "" {
+			return nil, fmt.Errorf("command failed: %w, stderr: %s", err, stderrStr)
+		}
+		return nil, err
+	}
 	return outputBuffer.Bytes(), nil
 }
 
@@ -118,18 +131,4 @@ func saveBase64Image(base64String, filename string) error {
 	}
 
 	return nil
-}
-
-// 保存Base64字符串到文件（可选）
-func saveBase64ToFile(filename, base64Image string) {
-	file, err := os.Create(filename)
-	if err != nil {
-		panic(err)
-	}
-	defer file.Close()
-
-	_, err = file.WriteString(base64Image)
-	if err != nil {
-		panic(err)
-	}
 }

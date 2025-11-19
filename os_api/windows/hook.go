@@ -73,7 +73,8 @@ type POINT struct {
 }
 
 var (
-	hHook uintptr
+	hMouseHook    uintptr
+	hKeyboardHook uintptr
 )
 
 var PressLock sync.RWMutex
@@ -111,35 +112,55 @@ func LowLevelMouseProc(nCode int, wParam uintptr, lParam uintptr) uintptr {
 }
 
 func WindowsHook() {
+	// 启动键盘钩子
 	go func() {
+		runtime.LockOSThread()
+		defer runtime.UnlockOSThread()
+
 		hMod, _, _ := getModuleHandleW.Call(0)
 
-		hHook, _, err := setWindowsHookExW.Call(
+		var err error
+		hKeyboardHook, _, err = setWindowsHookExW.Call(
 			uintptr(WH_KEYBOARD_LL),
 			syscall.NewCallback(onKeyboard),
 			hMod,
 			0,
 		)
-		if hHook == 0 {
-			fmt.Println("❌ 钩子安装失败:", err)
+		if hKeyboardHook == 0 {
+			fmt.Println("❌ 键盘钩子安装失败:", err)
 			return
 		}
+		defer unhookWindowsHookEx.Call(hKeyboardHook)
 
-		fmt.Println("✅ 钩子已安装，请依次按 Ctrl → Shift → C")
+		fmt.Println("✅ 钩子已安装，请依次按 Ctrl → Shift → F")
 
 		var msg struct{}
-		getMessageW.Call(uintptr(unsafe.Pointer(&msg)), 0, 0, 0)
+		// 必须在同一个线程中处理消息循环
+		for {
+			ret, _, _ := getMessageW.Call(uintptr(unsafe.Pointer(&msg)), 0, 0, 0)
+			if ret == 0 {
+				break
+			}
+		}
 	}()
 
-	hHook, _, _ = setWindowsHookExW.Call(uintptr(WH_MOUSE_LL), syscall.NewCallback(LowLevelMouseProc), 0, 0)
+	// 启动鼠标钩子（主线程中）
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
 
-	defer unhookWindowsHookEx.Call(hHook)
+	hMouseHook, _, _ = setWindowsHookExW.Call(uintptr(WH_MOUSE_LL), syscall.NewCallback(LowLevelMouseProc), 0, 0)
+	if hMouseHook != 0 {
+		defer unhookWindowsHookEx.Call(hMouseHook)
+	}
 
-	str, _ := syscall.UTF16PtrFromString("")
-
+	var msg struct{}
 	// 监听消息
-	getMessageW.Call(uintptr(unsafe.Pointer(&str)), 0, 0, 0)
-
+	for {
+		ret, _, _ := getMessageW.Call(uintptr(unsafe.Pointer(&msg)), 0, 0, 0)
+		if ret == 0 {
+			break
+		}
+	}
 }
 
 // 获取鼠标位置

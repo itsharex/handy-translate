@@ -335,7 +335,7 @@ export default function ToolBar() {
 
     // 播放中文翻译发音
     const handleSpeakChinese = async () => {
-        if (!result) {
+        if (!result && !resultStream) {
             console.log('result 为空，无法播放')
             return
         }
@@ -343,10 +343,10 @@ export default function ToolBar() {
         try {
             setIsPlayingZh(true)
             console.log('==== 开始播放中文翻译 ====')
-            console.log('文本:', result)
+            console.log('文本:', result || resultStream)
             console.log('语言: zh')
 
-            const audioData = await lingva_tts.tts(result, 'zh')
+            const audioData = await lingva_tts.tts(result || resultStream, 'zh')
             console.log('TTS API 返回:', audioData ? `成功 (长度: ${audioData.length})` : '失败/空')
 
             if (audioData) {
@@ -370,12 +370,21 @@ export default function ToolBar() {
 
     // 语音播放（普通模式）
     const handleSpeak = async () => {
-        if (!result) return
+        // 1. 如果正在播放，点击按钮则停止播放
+        if (isPlaying) {
+            console.log('手动停止播放');
+            await playOrStop(); // useVoice 内部逻辑：如果正在播放，再次调用会停止
+            setIsPlaying(false);
+            return;
+        }
+
+        // 2. 如果未播放，则开始播放
+        if (!result && !resultStream) return
 
         try {
             setIsPlaying(true)
-            const textToSpeak = result
-            const lang = /[\u4e00-\u9fa5]/.test(result) ? 'zh' : 'en'
+            const textToSpeak = result || resultStream
+            const lang = /[\u4e00-\u9fa5]/.test(result || resultStream) ? 'zh' : 'en'
             console.log('普通模式播放，语言:', lang, '文本:', textToSpeak)
 
             const audioData = await lingva_tts.tts(textToSpeak, lang)
@@ -987,17 +996,22 @@ export default function ToolBar() {
                             </Button>
                         </Tooltip>
 
-                        <Tooltip content={isPlaying ? "播放中..." : "朗读"} placement="bottom">
+                        <Tooltip content={isPlaying ? "停止播放" : "朗读"} placement="bottom">
                             <Button
                                 size="sm"
                                 isIconOnly
-                                color="secondary"
-                                aria-label="Speak"
+                                color={isPlaying ? "danger" : "secondary"}
+                                aria-label={isPlaying ? "Stop" : "Speak"}
                                 onPress={handleSpeak}
-                                isDisabled={!result}
-                                isLoading={isPlaying}
+                                isDisabled={!(result || resultStream)}
                             >
-                                <MdVolumeUp />
+                                {isPlaying ? (
+                                    /* 停止图标 */
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><path fill="currentColor" d="M6 6h12v12H6z" /></svg>
+                                ) : (
+                                    /* 播放图标 */
+                                    <MdVolumeUp />
+                                )}
                             </Button>
                         </Tooltip>
                     </div>

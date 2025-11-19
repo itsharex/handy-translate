@@ -17,32 +17,40 @@ export async function tts(text, lang, options = {}) {
 
     const jsonData = await response.json();
     console.log('TTS API 响应类型:', typeof jsonData);
-    console.log('TTS API 响应:', jsonData);
-    console.log('audio 字段类型:', typeof jsonData?.audio);
-    console.log('audio 字段:', jsonData?.audio);
+    // console.log('TTS API 响应:', jsonData); // 避免打印过长的日志
 
     if (response.ok) {
         let audioData = jsonData['audio'];
-        console.log('audioData 类型:', typeof audioData);
-        console.log('audioData 长度:', audioData?.length);
-        console.log('audioData 是数组吗:', Array.isArray(audioData));
-        console.log('audioData constructor:', audioData?.constructor?.name);
-
+        
         if (audioData) {
-            // 如果 audioData 是字符串类型
+            // 如果 audioData 是字符串类型 (Base64)
             if (typeof audioData === 'string') {
-                // 移除可能的 data URI 前缀（如 "data:audio/mp3;base64,"）
+                // 移除可能的 data URI 前缀
                 if (audioData.includes(',')) {
                     const parts = audioData.split(',');
                     audioData = parts[parts.length - 1];
-                    console.log('移除 data URI 前缀后的数据长度:', audioData.length);
+                }
+                
+                // Base64 解码为 Uint8Array
+                try {
+                    const binaryString = window.atob(audioData);
+                    const len = binaryString.length;
+                    const bytes = new Uint8Array(len);
+                    for (let i = 0; i < len; i++) {
+                        bytes[i] = binaryString.charCodeAt(i);
+                    }
+                    console.log('Base64 解码成功，数据长度:', bytes.length);
+                    return bytes;
+                } catch (e) {
+                    console.error('Base64 解码失败:', e);
+                    throw new Error('TTS 音频数据解码失败');
                 }
             }
-            // 如果是对象或数组，直接返回（可能已经是解码后的数据）
-            else if (typeof audioData === 'object') {
-                console.log('audioData 是对象类型，直接返回');
+            // 如果是数组（可能是某些 API 返回了字节数组）
+            else if (Array.isArray(audioData)) {
+                return new Uint8Array(audioData);
             }
-
+            
             return audioData;
         }
     }

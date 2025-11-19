@@ -12,11 +12,22 @@ import (
 	"github.com/tmc/langchaingo/prompts"
 )
 
-const Way = "deepseek"
+const (
+	Way              = "deepseek"
+	TranslatePrompts = `You are a professional translator.
+			"Please translate the following text accurately and naturally.
+			"Keep the original meaning, tone, and formatting.
+			"Do not explain or add anything else.
+			"If the text is Chinese, translate to English.
+			"If the text is English, translate to Chinese.
+			"Text:{{.text}}`
+)
 
 var (
-	once sync.Once
-	llm  *openai.LLM
+	once      sync.Once
+	llm       *openai.LLM
+	llmErr    error
+	llmErrMsg string
 )
 
 type Deepseek struct {
@@ -38,95 +49,59 @@ func (c *Deepseek) GetName() string {
 	return Way
 }
 
-func (c *Deepseek) GetLLM() *openai.LLM {
+func (c *Deepseek) GetLLM() (*openai.LLM, error) {
 	once.Do(func() {
-		var err error
-		llm, err = openai.New(
+		llm, llmErr = openai.New(
 			openai.WithToken(config.Data.Translate[Way].Key),
 			openai.WithModel("deepseek-chat"),
 			openai.WithBaseURL("https://api.deepseek.com"),
 		)
-		if err != nil {
-			log.Fatal(err)
+		if llmErr != nil {
+			llmErrMsg = "failed to initialize DeepSeek LLM: " + llmErr.Error()
+			log.Printf("ERROR: %s", llmErrMsg)
 		}
 	})
-	return llm
+	return llm, llmErr
 }
 
 func (c *Deepseek) PostQuery(query, fromLang, toLang string) ([]string, error) {
-	// Initialize the OpenAI client with Deepseek model
+	llm, err := c.GetLLM()
+	if err != nil {
+		return nil, err
+	}
 
-	// // 定义模板
-	// promptTemplate := prompts.NewPromptTemplate(
-	// 	"You are a professional translator.\n"+
-	// 		"Please translate the following text accurately and naturally.\n"+
-	// 		"Keep the original meaning, tone, and formatting.\n"+
-	// 		"Do not explain or add anything else.\n\n"+
-	// 		"If the text is Chinese, translate to English.\n"+
-	// 		"If the text is English, translate to Chinese.\n\n"+
-	// 		"Text:\n{{.text}}",
-	// 	[]string{"text"},
-	// )
-
-	// // 构建输入
-	// promptValue, err := promptTemplate.Format(map[string]any{
-	// 	"text": query,
-	// })
-	// if err != nil {
-	// 	panic(err)
-	// }
-
-	// // 调用 LLM
-	// resp, err := llms.GenerateFromSinglePrompt(context.Background(), c.GetLLM(), promptValue)
-	// if err != nil {
-	// 	panic(err)
-	// }
-
-	// slog.Info(resp)
-
-	// return []string{resp, ""}, nil
-	return []string{"", ""}, nil
-}
-
-// PostExplain 非流式术语解释，便于测试与一次性获取完整结果
-func (c *Deepseek) PostExplain(query string) (string, error) {
+	// 定义模板
 	promptTemplate := prompts.NewPromptTemplate(
-		"你是一名技术术语专家。\n"+
-			"请用简洁、清晰的中文解释以下技术术语。\n"+
-			"要求：\n"+
-			"1. 简要说明它是什么及核心原理\n"+
-			"2. 概述主要用途或应用场景\n"+
-			"3. 控制在 3~5 句话内，让人能快速理解\n\n"+
-			"术语：\n{{.text}}",
+		TranslatePrompts,
 		[]string{"text"},
 	)
 
+	// 构建输入
 	promptValue, err := promptTemplate.Format(map[string]any{
 		"text": query,
 	})
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
-	// 非流式一次性生成
-	resp, err := llms.GenerateFromSinglePrompt(context.Background(), c.GetLLM(), promptValue)
+	// 调用 LLM
+	resp, err := llms.GenerateFromSinglePrompt(context.Background(), llm, promptValue)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	return resp, nil
+
+	return []string{resp}, nil
 }
 
 // PostQueryStream 流式翻译
 func (c *Deepseek) PostQueryStream(query, fromLang, toLang string, callback func(chunk string)) error {
+	llm, err := c.GetLLM()
+	if err != nil {
+		return err
+	}
+
 	// 定义模板
-	promptTemplate := prompts.NewPromptTemplate(
-		"You are a professional translator.\n"+
-			"Please translate the following text accurately and naturally.\n"+
-			"Keep the original meaning, tone, and formatting.\n"+
-			"Do not explain or add anything else.\n\n"+
-			"If the text is Chinese, translate to English.\n"+
-			"If the text is English, translate to Chinese.\n\n"+
-			"Text:\n{{.text}}",
+	promptTemplate := prompts.NewPromptTemplate(TranslatePrompts,
 		[]string{"text"},
 	)
 
@@ -140,7 +115,7 @@ func (c *Deepseek) PostQueryStream(query, fromLang, toLang string, callback func
 
 	// 流式调用 LLM
 	ctx := context.Background()
-	_, err = c.GetLLM().GenerateContent(ctx, []llms.MessageContent{
+	_, err = llm.GenerateContent(ctx, []llms.MessageContent{
 		{
 			Parts: []llms.ContentPart{
 				llms.TextPart(promptValue),
@@ -160,6 +135,11 @@ func (c *Deepseek) PostQueryStream(query, fromLang, toLang string, callback func
 
 // PostExplainStream 流式术语解释（支持模板选择）
 func (c *Deepseek) PostExplainStream(query, templateID string, callback func(chunk string)) error {
+	llm, err := c.GetLLM()
+	if err != nil {
+		return err
+	}
+
 	// 获取模板内容
 	templateStr := c.getTemplate(templateID)
 
@@ -179,7 +159,7 @@ func (c *Deepseek) PostExplainStream(query, templateID string, callback func(chu
 
 	// 流式调用 LLM
 	ctx := context.Background()
-	_, err = c.GetLLM().GenerateContent(ctx, []llms.MessageContent{
+	_, err = llm.GenerateContent(ctx, []llms.MessageContent{
 		{
 			Parts: []llms.ContentPart{
 				llms.TextPart(promptValue),

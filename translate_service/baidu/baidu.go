@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"handy-translate/config"
+	"handy-translate/utils/httpclient"
 )
 
 const Way = "baidu"
@@ -65,7 +66,7 @@ func (b *Baidu) PostQuery(query, fromLang, toLang string) ([]string, error) {
 	form.Add("sign", sign)
 
 	// Send request
-	client := &http.Client{}
+	client := httpclient.GetDefaultClient()
 	req, err := http.NewRequest("POST", uri, strings.NewReader(form.Encode()))
 	if err != nil {
 		slog.Error("Error creating request:", slog.Any("err", err))

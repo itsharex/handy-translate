@@ -27,7 +27,7 @@ export const useVoice = () => {
         initAudioContext();
     }, []);
 
-    const playOrStop = useCallback(async (data) => {
+    const playOrStop = useCallback(async (data, options = {}) => {
         try {
             const ctx = initAudioContext();
 
@@ -56,9 +56,18 @@ export const useVoice = () => {
 
             source = ctx.createBufferSource();
             source.buffer = buffer;
+
+            // 设置播放速度
+            if (options.rate) {
+                source.playbackRate.value = options.rate;
+            } else {
+                // 默认速度稍微调快一点，通常 1.1 - 1.2 倍速比较自然
+                source.playbackRate.value = 1.2;
+            }
+
             source.connect(ctx.destination);
 
-            console.log('开始播放音频...');
+            console.log('开始播放音频，速度:', source.playbackRate.value);
             source.start(0);
 
             source.onended = () => {
