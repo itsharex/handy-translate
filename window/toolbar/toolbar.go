@@ -5,6 +5,8 @@ import (
 	"sync"
 	"time"
 
+	"handy-translate/config"
+
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/wailsapp/wails/v3/pkg/events"
 )
@@ -19,9 +21,8 @@ const (
 )
 
 var (
-	IsPinned              = false // 窗口固定状态
-	QueryResultHeight int = 110   // 高度
-	QueryResultWidth  int = 450   // 宽度
+	QueryResultHeight int = 110 // 高度
+	QueryResultWidth  int = 450 // 宽度
 )
 
 var toolWindowStyleApplied sync.Once // 确保只应用一次样式
@@ -29,17 +30,16 @@ var toolWindowStyleApplied sync.Once // 确保只应用一次样式
 // NewWindow 截图功能也可以提取成一个单独程序，设计screenshot，robotgo库的使用
 func NewWindow(app *application.App) {
 	Window = app.Window.NewWithOptions(application.WebviewWindowOptions{
-		Title:             WindowName,
-		Width:             QueryResultWidth,
-		Height:            QueryResultHeight,
-		AlwaysOnTop:       false,
-		Hidden:            true,
-		DisableResize:     false,
-		Frameless:         true,
-		InitialPosition:   application.WindowCentered,
-		EnableDragAndDrop: true,
-		URL:               "http://wails.localhost/index.html",
-		BackgroundType:    application.BackgroundTypeTranslucent, // 半透明背景，支持圆角
+		Title:           WindowName,
+		Width:           QueryResultWidth,
+		Height:          QueryResultHeight,
+		AlwaysOnTop:     false,
+		Hidden:          true,
+		DisableResize:   false,
+		Frameless:       true,
+		InitialPosition: application.WindowCentered,
+		URL:             "http://wails.localhost/index.html",
+		BackgroundType:  application.BackgroundTypeTranslucent, // 半透明背景，支持圆角
 	})
 
 	Window.SetMaxSize(QueryResultWidth+100, QueryResultHeight+500)
@@ -65,12 +65,12 @@ func NewWindow(app *application.App) {
 	// 处理失去焦点事件
 	Window.OnWindowEvent(events.Common.WindowLostFocus, func(e *application.WindowEvent) {
 		// 只有在未固定状态下才隐藏窗口
-		if !IsPinned {
+		if !config.Data.ToolbarPinned {
 			// 延迟隐藏，避免与 WebView2 焦点管理冲突
 			go func() {
 				time.Sleep(100 * time.Millisecond)
 				// 再次检查固定状态和窗口状态
-				if !IsPinned && Window != nil {
+				if !config.Data.ToolbarPinned && Window != nil {
 					application.InvokeSync(func() {
 						Window.Hide()
 					})

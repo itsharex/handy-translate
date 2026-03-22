@@ -11,10 +11,10 @@ import (
 )
 
 // Data config
-var Data config
+var Data Config
 
 type (
-	config struct {
+	Config struct {
 		Appname          string                 `toml:"appname"`
 		Keyboards        map[string][]string    `toml:"keyboards"`
 		TranslateWay     string                 `toml:"translate_way"`
@@ -22,12 +22,15 @@ type (
 		ExplainTemplates ExplainTemplatesConfig `toml:"explain_templates"`
 		History          HistoryConfig          `toml:"history"`
 		ToolbarMode      string                 `toml:"toolbar_mode"`
+		ToolbarPinned    bool                   `toml:"toolbar_pinned"`
 	}
 
 	Translate struct {
-		Name  string `toml:"name" json:"name,omitempty"`
-		AppID string `toml:"appID" json:"appID,omitempty"`
-		Key   string `toml:"key" json:"key,omitempty"`
+		Name    string `toml:"name" json:"name,omitempty"`
+		AppID   string `toml:"appID" json:"appID,omitempty"`
+		Key     string `toml:"key" json:"key,omitempty"`
+		BaseURL string `toml:"base_url" json:"base_url,omitempty"`
+		Model   string `toml:"model" json:"model,omitempty"`
 	}
 
 	ExplainTemplatesConfig struct {

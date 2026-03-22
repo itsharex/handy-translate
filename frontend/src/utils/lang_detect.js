@@ -1,5 +1,5 @@
 import { v4 as uuidv4 } from 'uuid';
-import { MyFetch } from '../../bindings/handy-translate/app';
+import { MyFetch } from '../../bindings/handy-translate/internal/app/binding';
 
 
 // 引入命名空间

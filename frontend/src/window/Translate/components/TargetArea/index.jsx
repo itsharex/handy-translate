@@ -28,7 +28,7 @@ import * as builtinServices from '../../../../services/translate';
 import { useConfig, useToastStyle, useVoice } from '../../../../hooks';
 import { sourceTextAtom, detectLanguageAtom } from '../SourceArea';
 import { sourceLanguageAtom, targetLanguageAtom } from '../LanguageArea';
-import { Translate, TranslateStream } from '../../../../../bindings/handy-translate/app';
+import { Translate, TranslateStream } from '../../../../../bindings/handy-translate/internal/app/binding';
 import { Events, Clipboard } from "@wailsio/runtime";
 
 export default function TargetArea(props) {

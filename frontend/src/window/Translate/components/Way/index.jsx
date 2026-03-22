@@ -5,7 +5,7 @@ import toast, { Toaster } from 'react-hot-toast';
 import { atom, useAtom, useAtomValue } from 'jotai';
 
 import { useSyncAtom } from '../../../../hooks';
-import { GetTranslateMap, SetTranslateWay, GetTranslateWay } from '../../../../../bindings/handy-translate/app';
+import { GetTranslateMap, SetTranslateWay, GetTranslateWay } from '../../../../../bindings/handy-translate/internal/app/binding';
 export const translateServiceListAtom = atom([]);
 
 let timer = null;

@@ -12,7 +12,7 @@ import About from './components/About';
 import { useConfig, useSyncAtom, useVoice, useToastStyle } from '../../hooks';
 import { translateServiceListAtom } from './components/Way';
 import { atom, useAtom, useAtomValue } from 'jotai';
-import { GetTranslateWay } from '../../../bindings/handy-translate/app';
+import { GetTranslateWay } from '../../../bindings/handy-translate/internal/app/binding';
 import { Window } from "@wailsio/runtime";
 
 let blurTimeout = null;

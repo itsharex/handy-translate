@@ -2,7 +2,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import toast, { Toaster } from 'react-hot-toast';
 import { useConfig, useToastStyle, useVoice } from '../../hooks';
 import { atom, useAtom } from 'jotai';
-import { CaptureSelectedScreen } from '../../../bindings/handy-translate/app';
+import { CaptureSelectedScreen } from '../../../bindings/handy-translate/internal/app/binding';
 import { Events, Window } from "@wailsio/runtime";
 
 

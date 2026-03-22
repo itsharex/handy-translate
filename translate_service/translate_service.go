@@ -5,6 +5,7 @@ import (
 	"handy-translate/translate_service/baidu"
 	"handy-translate/translate_service/caiyun"
 	"handy-translate/translate_service/deepseek"
+	"handy-translate/translate_service/minimax"
 	"handy-translate/translate_service/youdao"
 )
 
@@ -20,45 +21,44 @@ type StreamTranslate interface {
 	PostExplainStream(query, templateID string, callback func(chunk string)) error
 }
 
-func GetTranslateWay(way string) Translate {
-	var t Translate
-	switch way {
-	case youdao.Way:
-		t = &youdao.Youdao{
-			Translate: config.Translate{
-				Name:  config.Data.Translate[way].Name,
-				AppID: config.Data.Translate[way].AppID,
-				Key:   config.Data.Translate[way].Key,
-			},
-		}
-	case caiyun.Way:
-		t = &caiyun.Caiyun{
-			Translate: config.Translate{
-				Name:  config.Data.Translate[way].Name,
-				AppID: config.Data.Translate[way].AppID,
-				Key:   config.Data.Translate[way].Key,
-			},
-		}
-	case baidu.Way:
-		t = &baidu.Baidu{
-			Translate: config.Translate{
-				Name:  config.Data.Translate[way].Name,
-				AppID: config.Data.Translate[way].AppID,
-				Key:   config.Data.Translate[way].Key,
-			},
-		}
-	case deepseek.Way:
-		t = &deepseek.Deepseek{
-			Translate: config.Translate{
-				Name:  config.Data.Translate[way].Name,
-				AppID: config.Data.Translate[way].AppID,
-				Key:   config.Data.Translate[way].Key,
-			},
-		}
-	}
+// 翻译服务注册表：新增服务只需在 init() 中注册
+var registry = map[string]func(config.Translate) Translate{}
 
-	return t
+func init() {
+	registry[youdao.Way] = func(cfg config.Translate) Translate {
+		return &youdao.Youdao{Translate: cfg}
+	}
+	registry[caiyun.Way] = func(cfg config.Translate) Translate {
+		return &caiyun.Caiyun{Translate: cfg}
+	}
+	registry[baidu.Way] = func(cfg config.Translate) Translate {
+		return &baidu.Baidu{Translate: cfg}
+	}
+	registry[deepseek.Way] = func(cfg config.Translate) Translate {
+		return &deepseek.Deepseek{Translate: cfg}
+	}
+	registry[minimax.Way] = func(cfg config.Translate) Translate {
+		return &minimax.Minimax{Translate: cfg}
+	}
 }
 
-// Removed global queryText and lk
-// State should be managed by the caller (e.g., in app.go)
+// GetTranslateWay 通过注册表获取翻译服务实例
+func GetTranslateWay(way string) Translate {
+	factory, ok := registry[way]
+	if !ok {
+		return nil
+	}
+
+	cfgEntry, exists := config.Data.Translate[way]
+	if !exists {
+		return nil
+	}
+
+	return factory(config.Translate{
+		Name:    cfgEntry.Name,
+		AppID:   cfgEntry.AppID,
+		Key:     cfgEntry.Key,
+		BaseURL: cfgEntry.BaseURL,
+		Model:   cfgEntry.Model,
+	})
+}
