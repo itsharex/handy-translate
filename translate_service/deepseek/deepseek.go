@@ -140,21 +140,28 @@ func (c *Deepseek) PostExplainStream(query, templateID string, callback func(chu
 		return err
 	}
 
-	// 获取模板内容
-	templateStr := c.getTemplate(templateID)
+	var promptValue string
 
-	// 定义术语解释模板
-	promptTemplate := prompts.NewPromptTemplate(
-		templateStr,
-		[]string{"text"},
-	)
+	if templateID == "" {
+		// 没有模板 ID 时，直接使用 query 作为完整提示词（如 QueryWord 场景）
+		promptValue = query
+	} else {
+		// 获取模板内容
+		templateStr := c.getTemplate(templateID)
 
-	// 构建输入
-	promptValue, err := promptTemplate.Format(map[string]any{
-		"text": query,
-	})
-	if err != nil {
-		return err
+		// 定义术语解释模板
+		promptTemplate := prompts.NewPromptTemplate(
+			templateStr,
+			[]string{"text"},
+		)
+
+		// 构建输入
+		promptValue, err = promptTemplate.Format(map[string]any{
+			"text": query,
+		})
+		if err != nil {
+			return err
+		}
 	}
 
 	// 流式调用 LLM
@@ -177,43 +184,8 @@ func (c *Deepseek) PostExplainStream(query, templateID string, callback func(chu
 	return err
 }
 
-// getTemplate 获取提示词模板，支持从配置中读取
+// getTemplate 获取提示词模板，委托到共用模板查找逻辑。
 func (c *Deepseek) getTemplate(templateID string) string {
-	// 如果配置为空，使用硬编码的默认模板
-	if len(config.Data.ExplainTemplates.Templates) == 0 {
-		return ""
-	}
-
-	// 如果 templateID 为空，使用默认模板
-	if templateID == "" {
-		templateID = config.Data.ExplainTemplates.DefaultTemplate
-	}
-
-	// 如果默认模板也为空，使用第一个可用模板
-	if templateID == "" {
-		for id := range config.Data.ExplainTemplates.Templates {
-			templateID = id
-			break
-		}
-	}
-
-	// 从配置中获取模板
-	if template, exists := config.Data.ExplainTemplates.Templates[templateID]; exists {
-		return template.Template
-	}
-
-	// 如果指定的模板不存在，尝试使用默认模板
-	if config.Data.ExplainTemplates.DefaultTemplate != "" {
-		if template, exists := config.Data.ExplainTemplates.Templates[config.Data.ExplainTemplates.DefaultTemplate]; exists {
-			return template.Template
-		}
-	}
-
-	// 如果都找不到，使用第一个可用模板
-	for _, template := range config.Data.ExplainTemplates.Templates {
-		return template.Template
-	}
-
-	// 最后的回退：使用硬编码的默认模板
-	return ""
+	return config.FindTemplate(&config.Data.ExplainTemplates, templateID)
 }
+
