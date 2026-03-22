@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"runtime"
 	"strings"
+	"sync"
 
 	"handy-translate/config"
 	"handy-translate/history"
@@ -30,6 +31,10 @@ type Application struct {
 	History    *history.HistoryService
 	OCR        *service.OCRService
 	State      *State
+
+	// 查询取消机制：每次新查询会取消上一个正在进行的查询
+	queryMu     sync.Mutex
+	cancelQuery context.CancelFunc
 }
 
 // NewApplication 组装应用所有依赖。
@@ -144,8 +149,18 @@ func (a *Application) handleMouseEvent() {
 }
 
 func (a *Application) processCurrentQuery(queryText, mode string) {
+	// 取消上一个正在执行的查询
+	a.queryMu.Lock()
+	if a.cancelQuery != nil {
+		a.cancelQuery()
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	a.cancelQuery = cancel
+	a.queryMu.Unlock()
+
+	defer cancel() // 查询结束后清理
+
 	slog.Info("处理查询", slog.String("mode", mode), slog.Int("textLen", len(queryText)))
-	ctx := context.Background()
 	fl, tl := a.State.GetLangs()
 
 	switch mode {
@@ -172,6 +187,12 @@ func (a *Application) processCurrentQuery(queryText, mode string) {
 			if _, cached := a.Translator.WordCacheGet(queryText); !cached {
 				result := a.Translator.Translate(ctx, queryText, fl, tl)
 				slog.Info("阶段1 翻译完成", slog.Int("len", len(result)))
+			}
+
+			// 检查上下文是否已被取消
+			if ctx.Err() != nil {
+				slog.Debug("查询已取消，跳过阶段2")
+				return
 			}
 
 			// 阶段 2: 查询完整词典（缓存命中秒出 / LLM ~5秒）

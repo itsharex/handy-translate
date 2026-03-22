@@ -97,11 +97,19 @@ func (t *Translator) TranslateMeanings(ctx context.Context, queryText, fromLang,
 		err := sp.TranslateStream(ctx, translate.TranslateRequest{
 			Text: queryText, SourceLang: fromLang, TargetLang: toLang,
 		}, func(chunk string) {
+			if ctx.Err() != nil {
+				return
+			}
 			streamResult.WriteString(chunk)
 			chunkCount++
 			logger.LogChunkReceived(chunkCount, len(chunk), streamResult.Len())
 			t.eventBus.EmitResultMeaningsStream(streamResult.String())
 		})
+
+		if ctx.Err() != nil {
+			slog.Debug("释义查询已取消")
+			return ""
+		}
 
 		if err != nil {
 			elapsed := time.Since(startTime)
@@ -144,11 +152,21 @@ func (t *Translator) Explain(ctx context.Context, queryText, templateID string) 
 	startTime := time.Now()
 
 	err = sp.ExplainStream(ctx, queryText, templateID, func(chunk string) {
+		// 检查上下文是否已取消，避免往前端发送旧查询的数据
+		if ctx.Err() != nil {
+			return
+		}
 		streamResult.WriteString(chunk)
 		chunkCount++
 		logger.LogChunkReceived(chunkCount, len(chunk), streamResult.Len())
 		t.eventBus.EmitResultStream(streamResult.String())
 	})
+
+	// 如果上下文已取消，不发送完成事件
+	if ctx.Err() != nil {
+		slog.Debug("解释查询已取消")
+		return ""
+	}
 
 	if err != nil {
 		elapsed := time.Since(startTime)
@@ -254,11 +272,21 @@ func (t *Translator) translateStream(ctx context.Context, sp translate.StreamPro
 	err := sp.TranslateStream(ctx, translate.TranslateRequest{
 		Text: queryText, SourceLang: fromLang, TargetLang: toLang,
 	}, func(chunk string) {
+		// 检查上下文是否已取消，避免往前端发送旧查询的数据
+		if ctx.Err() != nil {
+			return
+		}
 		streamResult.WriteString(chunk)
 		chunkCount++
 		logger.LogChunkReceived(chunkCount, len(chunk), streamResult.Len())
 		t.eventBus.EmitResultStream(streamResult.String())
 	})
+
+	// 如果上下文已取消，不发送完成事件
+	if ctx.Err() != nil {
+		slog.Debug("翻译查询已取消")
+		return ""
+	}
 
 	if err != nil {
 		elapsed := time.Since(startTime)
