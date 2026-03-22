@@ -41,8 +41,7 @@ export default function Screenshot() {
         // context.drawImage(image, x, y, width, height, 0, 0, width, height);
         // const base64Data = canvas.toDataURL('image/png');
         // EventsEmit("screenshotCapture", base64Data)
-        CaptureSelectedScreen(x, y, x + width, y + height).then((res) => {
-            console.log("success", res)
+        CaptureSelectedScreen(x, y, x + width, y + height).then(() => {
         })
         setImgurl("")
     }

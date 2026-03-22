@@ -43,7 +43,7 @@ type TransResult struct {
 }
 
 func (b *Baidu) PostQuery(query, fromLang, toLang string) ([]string, error) {
-	slog.Info("PostQuery", slog.String("query", query), slog.String("fromLang", fromLang), slog.String("toLang", toLang))
+	slog.Debug("PostQuery", slog.String("query", query), slog.String("fromLang", fromLang), slog.String("toLang", toLang))
 	endpoint := "http://api.fanyi.baidu.com"
 	path := "/api/trans/vip/translate"
 	uri := endpoint + path
@@ -95,7 +95,7 @@ func (b *Baidu) PostQuery(query, fromLang, toLang string) ([]string, error) {
 	}
 
 	prettyResult, _ := json.MarshalIndent(result, "", "    ")
-	slog.Info(string(prettyResult))
+	slog.Debug("PostQuery 响应", slog.String("result", string(prettyResult)))
 
 	if len(result.TransResult) > 0 {
 		if result.TransResult[0].Dst == result.TransResult[0].Src {

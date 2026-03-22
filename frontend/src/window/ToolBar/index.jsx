@@ -28,7 +28,6 @@ const ttsCache = new Map()
 async function cachedTts(text, lang) {
     const key = `${lang}:${text.slice(0, 100)}`
     if (ttsCache.has(key)) {
-        console.log('✅ TTS 缓存命中:', key.slice(0, 30))
         // 每次返回副本，避免 decodeAudioData() transfer ArrayBuffer 后缓存失效
         return ttsCache.get(key).slice()
     }
@@ -71,7 +70,6 @@ export default function ToolBar() {
     // 初始化时从后端获取固定状态、模式和模板列表
     useEffect(() => {
         GetToolBarPinned().then(pinned => {
-            console.log('从后端获取工具栏固定状态:', pinned)
             setIsPinned(pinned)
             // 如果已固定，设置窗口为始终置顶
             if (pinned) {
@@ -83,7 +81,6 @@ export default function ToolBar() {
 
         // 获取工具栏模式
         GetToolbarMode().then(mode => {
-            console.log('从后端获取工具栏模式:', mode)
             if (mode) {
                 setMode(mode)
                 modeRef.current = mode
@@ -96,7 +93,6 @@ export default function ToolBar() {
         GetExplainTemplates().then(result => {
             try {
                 const data = JSON.parse(result)
-                console.log('获取到解释模板:', data)
 
                 if (data.templates && Object.keys(data.templates).length > 0) {
                     // 转换为数组格式
@@ -122,7 +118,6 @@ export default function ToolBar() {
         // 监听后端推送的模式更新
         const unsubscribeModeUpdated = Events.On("toolbarModeUpdated", function (data) {
             const newMode = typeof data.data === 'string' ? data.data : String(data.data || '')
-            console.log('收到工具栏模式更新:', newMode)
             if (newMode) {
                 setMode(newMode)
                 modeRef.current = newMode
@@ -132,7 +127,6 @@ export default function ToolBar() {
         // 监听后端推送的固定状态更新
         const unsubscribePinnedUpdated = Events.On("toolbarPinnedUpdated", function (data) {
             const pinned = !!data.data
-            console.log('收到工具栏固定状态更新:', pinned)
             setIsPinned(pinned)
         })
 
@@ -174,7 +168,6 @@ export default function ToolBar() {
             // 后端 SetToolBarPinned 会同时调用 Toolbar.SetAlwaysOnTop
             await SetToolBarPinned(newPinnedState)
             setIsPinned(newPinnedState)
-            console.log('窗口固定状态已更新:', newPinnedState)
         } catch (err) {
             console.error('设置固定状态失败:', err)
         }
@@ -236,7 +229,6 @@ export default function ToolBar() {
         const unsubscribeResult = Events.On("result", function (data) {
             // 确保 result 是字符串类型
             let result = typeof data.data === 'string' ? data.data : String(data.data || '')
-            console.log('收到 result 事件:', { result, type: typeof data.data })
             setResult(result)
             // 非流式结果到达时，清理旧的流式内容，避免累积显示
             streamBufferRef.current = ''
@@ -251,7 +243,6 @@ export default function ToolBar() {
         const unsubscribeQuery = Events.On("query", async function (data) {
             // 确保 text 是字符串类型
             const text = typeof data.data === 'string' ? data.data : String(data.data || '')
-            console.log('收到 query 事件:', { text, type: typeof data.data, data: data.data })
 
             // ✅ 立即设置加载状态，防止窗口被隐藏
             setIsLoading(true)
@@ -275,7 +266,6 @@ export default function ToolBar() {
             // 如果是单词，后端 processCurrentQuery 会直接调用 QueryWord
             // 结果通过 word_query_result 事件返回，前端只需设置加载状态
             if (isWordCheck && modeRef.current === 'translate') {
-                console.log('检测到单词，等待后端 QueryWord 事件:', text.trim())
                 setIsLoading(false)
                 setIsWordLoading(true)
                 // 不需要前端调用 QueryWord，后端自动处理
@@ -288,7 +278,6 @@ export default function ToolBar() {
         const unsubscribeStream = Events.On("result_stream", function (data) {
             // 确保是字符串类型
             let fullText = typeof data.data === 'string' ? data.data : String(data.data || '')
-            console.log('ToolBar 收到流式数据:', '总长度:', fullText.length)
 
             // ✅ 收到第一个数据时，清除加载状态
             if (fullText && streamBufferRef.current.length === 0) {
@@ -300,7 +289,6 @@ export default function ToolBar() {
         })
         const unsubscribeMeaningsStream = Events.On("result_meanings_stream", function (data) {
             let fullText = typeof data.data === 'string' ? data.data : String(data.data || '')
-            console.log('ToolBar 收到 meanings 流式数据:', '总长度:', fullText.length)
 
             if (fullText && streamBufferRef.current.length === 0) {
                 setIsLoading(false)
@@ -312,7 +300,6 @@ export default function ToolBar() {
 
         // 监听流式完成
         const unsubscribeStreamDone = Events.On("result_stream_done", function (data) {
-            console.log('ToolBar 流式翻译完成')
             // ✅ 确保清除加载状态
             setIsLoading(false)
         })
@@ -320,7 +307,6 @@ export default function ToolBar() {
         // 监听单词查询结果事件
         const unsubscribeWordQuery = Events.On("word_query_result", function (data) {
             const result = typeof data.data === 'string' ? data.data : String(data.data || '')
-            console.log('收到 word_query_result 事件, 长度:', result.length)
             try {
                 let jsonStr = result
                 jsonStr = jsonStr.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/\s*```$/i, '').trim()
@@ -350,9 +336,7 @@ export default function ToolBar() {
         if (!hasContent) {
             // 无内容且未加载时隐藏窗口
             const timer = setTimeout(() => {
-                console.log('无内容，隐藏工具栏窗口')
-                Hide("ToolBar").catch(err => {
-                    console.log('隐藏窗口失败（可能窗口尚未初始化）:', err)
+                Hide("ToolBar").catch(() => {
                 })
             }, 100)
             return () => clearTimeout(timer)
@@ -361,7 +345,6 @@ export default function ToolBar() {
         // 如果正在加载，显示固定高度的加载窗口
         if (isLoading) {
             const loadingHeight = 50 // 加载动画固定高度
-            console.log('显示加载动画，高度:', loadingHeight)
             ToolBarShow(loadingHeight)
             return
         }
@@ -374,7 +357,6 @@ export default function ToolBar() {
             requestAnimationFrame(() => {
                 requestAnimationFrame(() => {
                     if (!contentRef.current) {
-                        console.log('contentRef 未就绪')
                         return
                     }
 
@@ -385,13 +367,7 @@ export default function ToolBar() {
                     const maxContentHeight = 500 // 最大内容高度
                     const actualContentHeight = Math.min(contentHeight, maxContentHeight)
 
-                    console.log('有内容，显示工具栏:', {
-                        contentHeight,
-                        actualContentHeight,
-                        isWord,
-                        hasResult: !!result,
-                        resultLength: result?.length || 0
-                    })
+
 
                     // 调用 ToolBarShow 会自动显示窗口并设置高度
                     ToolBarShow(actualContentHeight)
@@ -490,7 +466,7 @@ export default function ToolBar() {
 
     // 渲染词典格式内容
     const renderWordDetailsContent = () => {
-        console.log('renderWordDetailsContent 调用，wordDetails:', wordDetails, 'queryText:', queryText, 'result:', result, "resultStream:", resultStream)
+
         return (
             <>
                 {/* 单词 + 音标 + 播放按钮 */}
@@ -619,14 +595,14 @@ export default function ToolBar() {
     return (
         <Card
             shadow="none"
-            className='rounded-[20px] w-full bg-white transition-all duration-200'
+            className='rounded-[20px] w-full bg-white transition-all duration-200 overflow-hidden'
             style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}>
 
-            <CardHeader className='px-[24px] pt-[20px] pb-[16px] bg-white border-b-0 flex justify-between items-center' style={{ "--wails-draggable": "drag" }}>
+            <CardHeader className='px-[24px] py-[12px] bg-gradient-to-r from-[#d4f0f7] to-[#dbeafe] border-b border-[#bae6fd]/50 flex justify-between items-center' style={{ "--wails-draggable": "drag" }}>
 
                 <div className="flex gap-[12px] items-center w-full justify-between" style={{ WebkitAppRegion: 'drag' }}>
                     {/* 应用 Logo 面板锚点 */}
-                    <div className="flex justify-center items-center w-[36px] h-[36px] min-w-[36px] select-none pointer-events-none">
+                    <div className="flex justify-center items-center w-[36px] h-[36px] min-w-[36px] select-none pointer-events-none bg-white/60 backdrop-blur-sm rounded-full shadow-sm border border-white/40">
                         <img src="/appicon.png" alt="Handy Translate" className="w-[24px] h-[24px] object-contain drop-shadow-sm" draggable="false" />
                     </div>
 
@@ -699,14 +675,12 @@ export default function ToolBar() {
                                 selectionMode="single"
                                 onAction={async (key) => {
                                     const newTemplateId = String(key)
-                                    console.log('模板切换，新模板ID:', newTemplateId)
                                     setSelectedTemplate(newTemplateId)
                                     selectedTemplateRef.current = newTemplateId // 同步更新 ref
 
                                     // 更新默认模板到后端（这样下次查询时会使用新模板）
                                     try {
                                         await SetDefaultExplainTemplate(newTemplateId)
-                                        console.log('默认模板已更新:', newTemplateId)
                                     } catch (err) {
                                         console.error('更新默认模板失败:', err)
                                     }
@@ -740,7 +714,7 @@ export default function ToolBar() {
                                 size="sm"
                                 isIconOnly
                                 variant="flat"
-                                className={`w-[36px] h-[36px] min-w-[36px] rounded-full active:scale-90 transition-all duration-300 ${isPinned ? 'bg-gradient-to-tr from-orange-400 to-amber-500 text-white shadow-md shadow-orange-500/30 pinned-glow border border-orange-300' : 'bg-transparent text-slate-400 hover:bg-orange-50 hover:text-orange-500 active:bg-orange-100 active:text-orange-600 border border-transparent hover:border-orange-100'}`}
+                                className={`w-[36px] h-[36px] min-w-[36px] rounded-full active:scale-90 transition-all duration-300 ${isPinned ? 'bg-gradient-to-tr from-orange-400 to-amber-500 text-white shadow-md shadow-orange-500/30 pinned-glow border border-orange-300' : 'bg-white/60 backdrop-blur-sm text-slate-500 hover:bg-orange-50 hover:text-orange-500 active:bg-orange-100 active:text-orange-600 border border-white/40 hover:border-orange-200 shadow-sm'}`}
                                 aria-label="Pin"
                                 onPress={handlePinToggle}
                             >
@@ -753,7 +727,7 @@ export default function ToolBar() {
                                 size="sm"
                                 isIconOnly
                                 variant="flat"
-                                className={`w-[36px] h-[36px] min-w-[36px] rounded-full active:scale-90 transition-all duration-300 ${isCopied ? 'bg-gradient-to-tr from-emerald-400 to-teal-500 text-white shadow-md shadow-emerald-500/30 border border-emerald-300' : 'bg-transparent text-slate-400 hover:bg-emerald-50 hover:text-emerald-500 active:bg-emerald-100 active:text-emerald-600 border border-transparent hover:border-emerald-100'}`}
+                                className={`w-[36px] h-[36px] min-w-[36px] rounded-full active:scale-90 transition-all duration-300 ${isCopied ? 'bg-gradient-to-tr from-emerald-400 to-teal-500 text-white shadow-md shadow-emerald-500/30 border border-emerald-300' : 'bg-white/60 backdrop-blur-sm text-slate-500 hover:bg-emerald-50 hover:text-emerald-500 active:bg-emerald-100 active:text-emerald-600 border border-white/40 hover:border-emerald-200 shadow-sm'}`}
                                 aria-label="Copy"
                                 onPress={handleCopy}
                                 isDisabled={!(result || resultStream)}
@@ -769,7 +743,7 @@ export default function ToolBar() {
             </CardHeader>
 
 
-            <CardBody className="overflow-hidden px-[24px] pb-[20px] pt-0">
+            <CardBody className="overflow-hidden px-[24px] pb-[12px] pt-0">
                 {isLoading && !resultStream && !isWordLoading ? (
                     renderLoading()
                 ) : !(result || resultStream || resultMeaningsStream || (isWord && (wordDetails || isWordLoading))) ? (
@@ -785,7 +759,7 @@ export default function ToolBar() {
                             </div>
 
                         ) : mode === 'explain' ? (
-                            <div className="markdown-content leading-relaxed pb-4">
+                            <div className="markdown-content leading-relaxed pb-0">
                                 <ReactMarkdown
                                     components={{
                                         h1: ({ node, ...props }) => <h1 className="text-xl font-bold mb-3 mt-4 text-slate-900" {...props} />,
@@ -813,7 +787,7 @@ export default function ToolBar() {
                                 </ReactMarkdown>
                             </div>
                         ) : (
-                            <p className="result-text whitespace-pre-wrap pt-2 pb-4">
+                            <p className="result-text whitespace-pre-wrap pt-2 pb-0">
                                 <span className={resultStream && !result ? 'typing-cursor' : ''}>
                                     {resultStream || result}
                                 </span>

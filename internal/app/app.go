@@ -56,7 +56,6 @@ func NewApplication(
 func (a *Application) RegisterEvents() {
 	// 翻译语言切换
 	a.EventBus.On(event.TranslateLang, func(e *application.CustomEvent) {
-		slog.Info("translateLang", slog.Any("event", e))
 		if dataSlice, ok := e.Data.([]interface{}); ok {
 			if len(dataSlice) >= 2 {
 				from := fmt.Sprintf("%v", dataSlice[0])
@@ -71,7 +70,6 @@ func (a *Application) RegisterEvents() {
 
 	// 工具栏模式切换
 	a.EventBus.On(event.ToolbarMode, func(e *application.CustomEvent) {
-		slog.Info("toolbarMode", slog.Any("event", e))
 		if mode, ok := e.Data.(string); ok {
 			a.SetToolbarMode(mode)
 			slog.Info("toolbarMode 已更新", slog.String("mode", mode))
@@ -127,13 +125,11 @@ func (a *Application) handleMouseEvent() {
 
 	queryText := result
 	fl, tl := a.State.GetLangs()
-	slog.Info("processHook",
-		slog.String("queryText", queryText),
+	slog.Debug("processHook",
 		slog.String("fromLang", fl),
 		slog.String("toLang", tl))
-
 	// 当工具栏未固定时，重置并显示
-	if !a.WindowMgr.IsPinned {
+	if !a.WindowMgr.GetPinned() {
 		a.WindowMgr.ResetToolbarState()
 		a.WindowMgr.ShowToolbarAtCursor(a.WindowMgr.QueryResultHeight)
 	}
@@ -148,6 +144,7 @@ func (a *Application) handleMouseEvent() {
 }
 
 func (a *Application) processCurrentQuery(queryText, mode string) {
+	slog.Info("处理查询", slog.String("mode", mode), slog.Int("textLen", len(queryText)))
 	ctx := context.Background()
 	fl, tl := a.State.GetLangs()
 
@@ -190,11 +187,12 @@ func (a *Application) processCurrentQuery(queryText, mode string) {
 // 辅助方法
 // ──────────────────────────────────────────────
 
-var wordRegex = regexp.MustCompile(`^[a-zA-Z]{1,20}$`)
+var wordRegex = regexp.MustCompile(`^[a-zA-Z]([a-zA-Z'-]*[a-zA-Z])?$`)
 
-// isWord 判断是否为单个英文单词。
+// isWord 判断是否为单个英文单词（支持连字符和撇号）。
 func isWord(text string) bool {
-	return wordRegex.MatchString(strings.TrimSpace(text))
+	trimmed := strings.TrimSpace(text)
+	return len(trimmed) <= 30 && wordRegex.MatchString(trimmed)
 }
 
 // TruncateText 截断文本用于日志显示。

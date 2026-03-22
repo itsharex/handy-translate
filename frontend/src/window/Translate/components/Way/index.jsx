@@ -36,7 +36,6 @@ export default function Way() {
                 label="选择你想要的翻译服务"
                 value={selected}
                 onValueChange={(value => {
-                    console.log(value)
                     setSelected(value)
                     SetTranslateWay(value)
                     setTranslateServiceList([value])

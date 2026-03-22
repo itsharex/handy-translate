@@ -4,12 +4,12 @@ package translate
 
 import (
 	"context"
-	"strings"
 
 	"handy-translate/config"
 	"handy-translate/translate_service/baidu"
 	"handy-translate/translate_service/caiyun"
 	"handy-translate/translate_service/deepseek"
+	"handy-translate/translate_service/google"
 	"handy-translate/translate_service/minimax"
 	"handy-translate/translate_service/youdao"
 )
@@ -40,6 +40,20 @@ type youdaoAdapter struct{ inner *youdao.Youdao }
 func (a *youdaoAdapter) Name() string { return youdao.Way }
 func (a *youdaoAdapter) Translate(_ context.Context, req TranslateRequest) ([]string, error) {
 	return a.inner.PostQuery(req.Text, req.SourceLang, req.TargetLang)
+}
+
+// google 适配器（支持流式）
+type googleAdapter struct{ inner *google.Google }
+
+func (a *googleAdapter) Name() string { return google.Way }
+func (a *googleAdapter) Translate(_ context.Context, req TranslateRequest) ([]string, error) {
+	return a.inner.PostQuery(req.Text, req.SourceLang, req.TargetLang)
+}
+func (a *googleAdapter) TranslateStream(_ context.Context, req TranslateRequest, onChunk func(string)) error {
+	return a.inner.PostQueryStream(req.Text, req.SourceLang, req.TargetLang, onChunk)
+}
+func (a *googleAdapter) ExplainStream(_ context.Context, text, templateID string, onChunk func(string)) error {
+	return a.inner.PostExplainStream(text, templateID, onChunk)
 }
 
 // deepseek 适配器（支持流式）
@@ -85,6 +99,9 @@ func RegisterAll(r *Registry) {
 	r.Register(youdao.Way, func(cfg config.Translate) Provider {
 		return &youdaoAdapter{inner: &youdao.Youdao{Translate: cfg}}
 	})
+	r.Register(google.Way, func(cfg config.Translate) Provider {
+		return &googleAdapter{inner: &google.Google{Translate: cfg}}
+	})
 	r.Register(deepseek.Way, func(cfg config.Translate) Provider {
 		return &deepseekAdapter{inner: &deepseek.Deepseek{Translate: cfg}}
 	})
@@ -97,8 +114,6 @@ func RegisterAll(r *Registry) {
 var _ Provider = (*baiduAdapter)(nil)
 var _ Provider = (*caiyunAdapter)(nil)
 var _ Provider = (*youdaoAdapter)(nil)
+var _ StreamProvider = (*googleAdapter)(nil)
 var _ StreamProvider = (*deepseekAdapter)(nil)
 var _ StreamProvider = (*minimaxAdapter)(nil)
-
-// unused import guard
-var _ = strings.Join

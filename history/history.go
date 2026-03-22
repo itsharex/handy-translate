@@ -2,17 +2,17 @@ package history
 
 import (
 	"encoding/json"
-	"fmt"
+	"log/slog"
 	"os"
 	"path"
 	"sync"
 	"time"
 
-	"handy-translate/config"
-	"handy-translate/window/toolbar"
-
 	"github.com/google/uuid"
 )
+
+// 模式常量（避免依赖 UI 层包）
+const explainMode = "explain"
 
 // HistoryRecord 历史记录结构
 type HistoryRecord struct {
@@ -33,11 +33,11 @@ type HistoryService struct {
 	mu          sync.Mutex // 互斥锁，保证并发写入安全
 }
 
-// NewHistoryService 创建历史记录服务实例
-func NewHistoryService() *HistoryService {
+// NewHistoryService 创建历史记录服务实例（依赖注入）。
+func NewHistoryService(enabled bool, storagePath string) *HistoryService {
 	return &HistoryService{
-		enabled:     config.Data.History.Enabled,
-		storagePath: config.Data.History.StoragePath,
+		enabled:     enabled,
+		storagePath: storagePath,
 	}
 }
 
@@ -61,7 +61,7 @@ func (h *HistoryService) SaveTranslateRecord(sourceText, result, fromLang, toLan
 	filePath := path.Join(h.storagePath, "history", "translate", date+".json")
 
 	h.appendToFile(filePath, record)
-	fmt.Printf("翻译历史记录已保存，ID: %s\n", record.ID)
+	slog.Debug("翻译历史记录已保存", slog.String("id", record.ID))
 }
 
 // SaveExplainRecord 保存解释记录（只保存源词语）
@@ -72,18 +72,18 @@ func (h *HistoryService) SaveExplainRecord(sourceText, result, templateID string
 
 	record := &HistoryRecord{
 		ID:         uuid.New().String(),
-		Type:       toolbar.ExplainMode,
+		Type:       explainMode,
 		SourceText: sourceText,
-		Result:     result, // 解释类型不保存结果
+		Result:     result,
 		TemplateID: templateID,
 		Timestamp:  time.Now(),
 	}
 
 	date := record.Timestamp.Format("2006-01-02")
-	filePath := path.Join(h.storagePath, "history", toolbar.ExplainMode, date+".json")
+	filePath := path.Join(h.storagePath, "history", explainMode, date+".json")
 
 	h.appendToFile(filePath, record)
-	fmt.Printf("解释历史记录已保存，ID: %s，词语: %s\n", record.ID, sourceText)
+	slog.Debug("解释历史记录已保存", slog.String("id", record.ID), slog.String("word", sourceText))
 }
 
 // appendToFile 将记录追加到文件
@@ -94,7 +94,7 @@ func (h *HistoryService) appendToFile(filePath string, record *HistoryRecord) {
 	// 确保目录存在
 	err := os.MkdirAll(path.Dir(filePath), 0755)
 	if err != nil {
-		fmt.Printf("创建历史记录目录失败: %v\n", err)
+		slog.Error("创建历史记录目录失败", slog.Any("error", err))
 		return
 	}
 
@@ -103,10 +103,10 @@ func (h *HistoryService) appendToFile(filePath string, record *HistoryRecord) {
 	if _, err := os.Stat(filePath); err == nil {
 		data, err := os.ReadFile(filePath)
 		if err != nil {
-			fmt.Printf("读取历史记录文件失败: %v\n", err)
+			slog.Error("读取历史记录文件失败", slog.Any("error", err))
 		} else {
 			if err := json.Unmarshal(data, &records); err != nil {
-				fmt.Printf("解析历史记录文件失败: %v\n", err)
+				slog.Error("解析历史记录文件失败", slog.Any("error", err))
 			}
 		}
 	}
@@ -117,14 +117,11 @@ func (h *HistoryService) appendToFile(filePath string, record *HistoryRecord) {
 	// 写回文件
 	data, err := json.MarshalIndent(records, "", "  ")
 	if err != nil {
-		fmt.Printf("序列化历史记录失败: %v\n", err)
+		slog.Error("序列化历史记录失败", slog.Any("error", err))
 		return
 	}
 
 	if err := os.WriteFile(filePath, data, 0644); err != nil {
-		fmt.Printf("写入历史记录文件失败: %v\n", err)
+		slog.Error("写入历史记录文件失败", slog.Any("error", err))
 	}
 }
-
-// 全局历史记录服务实例
-var GlobalHistoryService *HistoryService

@@ -4,8 +4,10 @@ package window
 import (
 	"log/slog"
 	"runtime"
+	"sync"
 
 	"handy-translate/config"
+	"handy-translate/internal/event"
 	"handy-translate/os_api/windows"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
@@ -33,21 +35,24 @@ const (
 // Manager 窗口管理器，统一管理所有窗口的显示/隐藏/定位。
 type Manager struct {
 	app        *application.App
+	eventBus   *event.Bus
 	Toolbar    *application.WebviewWindow
 	Translate  *application.WebviewWindow
 	Screenshot *application.WebviewWindow
 
-	// 工具栏状态
-	IsPinned         bool
+	// 工具栏状态（通过 mutex 保护）
+	mu                sync.RWMutex
+	isPinned          bool
 	QueryResultHeight int
 	QueryResultWidth  int
-	toolbarShowing   bool
+	toolbarShowing    bool
 }
 
 // NewManager 创建窗口管理器。
-func NewManager(app *application.App) *Manager {
+func NewManager(app *application.App, eventBus *event.Bus) *Manager {
 	return &Manager{
-		app:              app,
+		app:               app,
+		eventBus:          eventBus,
 		QueryResultHeight: 110,
 		QueryResultWidth:  450,
 	}
@@ -88,32 +93,47 @@ func (m *Manager) GetWindow(name string) *application.WebviewWindow {
 	}
 }
 
-// IsToolbarShowing 获取工具栏是否正在显示。
+// GetPinned 获取工具栏固定状态（并发安全）。
+func (m *Manager) GetPinned() bool {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.isPinned
+}
+
+// IsToolbarShowing 获取工具栏是否正在显示（并发安全）。
 func (m *Manager) IsToolbarShowing() bool {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 	return m.toolbarShowing
 }
 
-// SetToolbarShowing 设置工具栏显示状态。
+// SetToolbarShowing 设置工具栏显示状态（并发安全）。
 func (m *Manager) SetToolbarShowing(showing bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.toolbarShowing = showing
 }
 
-// ResetToolbarState 重置工具栏状态。
+// ResetToolbarState 重置工具栏状态（并发安全）。
 func (m *Manager) ResetToolbarState() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.toolbarShowing = false
-	slog.Info("工具栏状态已重置")
 }
 
 // SetPinned 设置工具栏固定状态（同时操作窗口置顶）。
 func (m *Manager) SetPinned(pinned bool) {
-	m.IsPinned = pinned
+	m.mu.Lock()
+	m.isPinned = pinned
+	m.mu.Unlock()
+
 	config.Data.ToolbarPinned = pinned
 	_ = config.Save()
 
 	if m.Toolbar != nil {
 		m.Toolbar.SetAlwaysOnTop(pinned)
-		// 通知前端更新状态
-		m.app.Event.Emit("toolbarPinnedUpdated", pinned)
+		// 通过 EventBus 使用常量发射事件
+		m.eventBus.EmitToolbarPinnedUpdated(pinned)
 		slog.Info("工具栏置顶状态已更新", slog.Bool("pinned", pinned))
 	}
 }
@@ -125,17 +145,21 @@ func (m *Manager) ShowToolbarAtCursor(height int) {
 		return
 	}
 
+	m.mu.Lock()
 	h := min(height, m.QueryResultHeight+500)
 	if h == 0 {
 		h = m.QueryResultHeight
 	}
 	m.QueryResultHeight = h
+	showing := m.toolbarShowing
+	isPinned := m.isPinned
+	m.mu.Unlock()
 
 	w.SetSize(w.Width(), h)
-	w.SetAlwaysOnTop(m.IsPinned)
+	w.SetAlwaysOnTop(isPinned)
 
 	// 如果窗口已经显示，只调整大小
-	if m.toolbarShowing {
+	if showing {
 		return
 	}
 
@@ -172,5 +196,7 @@ func (m *Manager) ShowToolbarAtCursor(height int) {
 		m.Toolbar.Show()
 	}
 
+	m.mu.Lock()
 	m.toolbarShowing = true
+	m.mu.Unlock()
 }

@@ -1,11 +1,10 @@
 package utils
 
 import (
-	"fmt"
+	"log/slog"
 	"github.com/gorilla/websocket"
 	neturl "net/url"
 	"os"
-	"strconv"
 	"strings"
 	"sync"
 )
@@ -16,7 +15,7 @@ import (
 func InitConnection(url string) (*websocket.Conn, *sync.WaitGroup) {
 	ws, _, err := websocket.DefaultDialer.Dial(url, nil)
 	if err != nil {
-		fmt.Println("connection failed.", err)
+		slog.Error("WebSocket 连接失败", slog.Any("error", err))
 		os.Exit(-1)
 	}
 	wg := sync.WaitGroup{}
@@ -44,7 +43,7 @@ func InitConnectionWithParams(url string, paramsMap map[string][]string) (*webso
 */
 func SendBinaryMessage(ws *websocket.Conn, message []byte) {
 	ws.WriteMessage(websocket.BinaryMessage, message)
-	fmt.Println("send binary message length: " + strconv.Itoa(len(message)))
+	slog.Debug("WebSocket 发送二进制消息", slog.Int("length", len(message)))
 }
 
 /*
@@ -52,28 +51,28 @@ func SendBinaryMessage(ws *websocket.Conn, message []byte) {
 */
 func SendTextMessage(ws *websocket.Conn, message string) {
 	ws.WriteMessage(websocket.TextMessage, []byte(message))
-	fmt.Println("send text message: " + message)
+	slog.Debug("WebSocket 发送文本消息", slog.String("message", message))
 }
 
 func messageHandler(ws *websocket.Conn, wg *sync.WaitGroup) {
 	for {
 		msgType, msg, err := ws.ReadMessage()
 		if err != nil {
-			fmt.Println("message handler error ", err)
+			slog.Error("WebSocket 消息处理错误", slog.Any("error", err))
 			break
 		}
 		switch msgType {
 		case websocket.TextMessage:
 			message := string(msg)
-			fmt.Println("received text message: " + message)
+			slog.Debug("WebSocket 收到文本消息", slog.String("message", message))
 			if !strings.Contains(message, "\"errorCode\":\"0\"") {
 				wg.Done()
 				os.Exit(-1)
 			}
 		case websocket.BinaryMessage:
-			fmt.Println("received binary message length: " + string(rune(len(msg))))
+			slog.Debug("WebSocket 收到二进制消息", slog.Int("length", len(msg)))
 		case websocket.CloseMessage:
-			fmt.Println("connection closed. " + string(msg))
+			slog.Info("WebSocket 连接已关闭", slog.String("message", string(msg)))
 		}
 	}
 }

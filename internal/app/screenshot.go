@@ -1,4 +1,4 @@
-// Package app 完整的截图+OCR+翻译流程。
+// screenshot.go 完整的截图+OCR+翻译流程。
 package app
 
 import (
@@ -38,6 +38,7 @@ func (a *Application) HandleCaptureSelectedScreen(startX, startY, width, height 
 
 	// OCR 解析文本
 	queryText := a.OCR.Recognize(filename)
+	slog.Info("OCR 识别完成", slog.Int("textLen", len(queryText)))
 	a.State.SetCurrentQuery(queryText)
 	a.WindowMgr.ResetToolbarState()
 

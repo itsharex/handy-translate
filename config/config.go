@@ -5,6 +5,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/pelletier/go-toml/v2"
@@ -12,6 +13,9 @@ import (
 
 // Data config
 var Data Config
+
+// configFilePath 存储配置文件的绝对路径，Init 和 Save 共用。
+var configFilePath string
 
 type (
 	Config struct {
@@ -50,28 +54,41 @@ type (
 	}
 )
 
-// Init  config
+// Init 初始化配置。
 func Init(projectName string) {
-	filePath, _ := os.Getwd()
-	b := strings.Index(filePath, projectName)
-	configPath := filePath[:b+len(projectName)]
+	cwd, err := os.Getwd()
+	if err != nil {
+		slog.Error("获取工作目录失败", slog.Any("error", err))
+		return
+	}
 
-	configFile, err := os.Open(configPath + "/config.toml")
+	idx := strings.Index(cwd, projectName)
+	if idx == -1 {
+		slog.Error("工作目录中未找到项目名，将使用默认配置",
+			slog.String("cwd", cwd),
+			slog.String("projectName", projectName))
+		return
+	}
+
+	configDir := cwd[:idx+len(projectName)]
+	configFilePath = filepath.Join(configDir, "config.toml")
+
+	configFile, err := os.Open(configFilePath)
 	if err != nil {
 		slog.Error("打开配置文件失败，将使用默认配置", slog.Any("error", err))
-		return // ← 改为 return，而不是 os.Exit(1)，允许应用继续运行
+		return
 	}
 	defer configFile.Close()
 
 	fd, err := io.ReadAll(configFile)
 	if err != nil {
 		slog.Error("读取配置文件失败", slog.Any("error", err))
-		return // ← 改为 return
+		return
 	}
 	err = toml.Unmarshal(fd, &Data)
 	if err != nil {
 		slog.Error("解析配置文件失败", slog.Any("error", err))
-		return // ← 改为 return
+		return
 	}
 
 	// 只在调试模式下打印配置（减少启动时 I/O）
@@ -80,8 +97,12 @@ func Init(projectName string) {
 	}
 }
 
+// Save 保存配置到文件（原子写入）。
 func Save() error {
-	filePath := "./config.toml"
+	if configFilePath == "" {
+		configFilePath = "./config.toml"
+	}
+
 	data, err := toml.Marshal(&Data)
 	if err != nil {
 		slog.Error("Marshal config failed", slog.Any("error", err))
@@ -90,7 +111,7 @@ func Save() error {
 
 	// 使用原子写入: 先写临时文件，然后重命名
 	// 这样可以避免写入失败导致配置文件损坏
-	tempFilePath := filePath + ".tmp"
+	tempFilePath := configFilePath + ".tmp"
 
 	// 创建临时文件
 	file, err := os.Create(tempFilePath)
@@ -119,12 +140,12 @@ func Save() error {
 	file.Close()
 
 	// 原子性地重命名临时文件为目标文件
-	if err := os.Rename(tempFilePath, filePath); err != nil {
+	if err := os.Rename(tempFilePath, configFilePath); err != nil {
 		os.Remove(tempFilePath) // 清理临时文件
 		slog.Error("Rename config file failed", slog.Any("error", err))
 		return fmt.Errorf("rename config file: %w", err)
 	}
 
-	slog.Info("Config saved successfully")
+	slog.Debug("Config saved successfully")
 	return nil
 }

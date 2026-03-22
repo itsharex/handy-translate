@@ -70,9 +70,7 @@ export default function TargetArea(props) {
         // 监听流式翻译结果
         const unsubscribeStream = Events.On("result_stream", function (data) {
             let chunk = typeof data.data === 'string' ? data.data : String(data.data || '')
-            console.log('收到流式数据块:', chunk, '长度:', chunk.length)
             streamBufferRef.current += chunk  // 累积到 ref
-            console.log('当前累积结果:', streamBufferRef.current)
             setResult(streamBufferRef.current)  // 更新状态触发重渲染
             setIsLoading(false)
         })
@@ -115,7 +113,6 @@ export default function TargetArea(props) {
 
                 // 如果是 DeepSeek，使用流式 API
                 if (translateServiceName === 'deepseek') {
-                    console.log('开始 DeepSeek 流式翻译:', sourceText)
                     TranslateStream(sourceText, LanguageEnum[sourceLanguage], LanguageEnum[targetLanguage])
                 } else {
                     // 其他服务使用普通 API

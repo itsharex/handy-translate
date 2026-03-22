@@ -22,6 +22,13 @@ name = '有道翻译'
 appID = ''
 key = ''
 
+[translate.google]
+name = 'Google Gemini'
+appID = 'google'
+key = ''
+base_url = 'https://generativelanguage.googleapis.com/v1beta/openai'
+model = 'gemini-2.0-flash'
+
 [explain_templates]
 default_template = 'programmer'
 

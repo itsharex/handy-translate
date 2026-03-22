@@ -12,11 +12,10 @@ export async function tts(text, lang, options = {}) {
         requestPath = 'https://' + requestPath;
     }
 
-    console.log('TTS API 请求:', `${requestPath}/api/v1/audio/${lang}/${encodeURIComponent(text)}`);
+
     const response = await fetch(`${requestPath}/api/v1/audio/${lang}/${encodeURIComponent(text)}`);
 
     const jsonData = await response.json();
-    console.log('TTS API 响应类型:', typeof jsonData);
     // console.log('TTS API 响应:', jsonData); // 避免打印过长的日志
 
     if (response.ok) {
@@ -39,7 +38,6 @@ export async function tts(text, lang, options = {}) {
                     for (let i = 0; i < len; i++) {
                         bytes[i] = binaryString.charCodeAt(i);
                     }
-                    console.log('Base64 解码成功，数据长度:', bytes.length);
                     return bytes;
                 } catch (e) {
                     console.error('Base64 解码失败:', e);

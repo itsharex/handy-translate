@@ -3,7 +3,6 @@ package screenshot
 import (
 	"bytes"
 	"encoding/base64"
-	"fmt"
 	"image"
 	"image/png"
 	"log/slog"
@@ -70,11 +69,11 @@ func ScreenshotFullScreen() string {
 
 // CaptureSelectedScreen 截图功能
 func CaptureSelectedScreen(startX, startY, endwidth, endheight int) image.Image {
-	slog.Info("CaptureSelectedScreen",
-		slog.Any("startX", startX),
-		slog.Any("startY", startY),
-		slog.Any("endwidth", endwidth),
-		slog.Any("endheight", endheight))
+	slog.Debug("CaptureSelectedScreen",
+		slog.Int("startX", startX),
+		slog.Int("startY", startY),
+		slog.Int("endwidth", endwidth),
+		slog.Int("endheight", endheight))
 
 	// x, y, width, height := startX, startY, endwidth, endheight
 	// 裁剪图片
@@ -91,8 +90,7 @@ func CaptureSelectedScreen(startX, startY, endwidth, endheight int) image.Image 
 		img, err := screenshot.CaptureRect(bounds)
 
 		if err != nil {
-			// 错误处理，输出错误信息并返回
-			fmt.Println("Error capturing screenshot:", err)
+			slog.Error("截图失败", slog.Any("error", err))
 			return nil
 		}
 		ScreenshotImg = img

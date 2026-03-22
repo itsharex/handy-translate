@@ -4,7 +4,7 @@ package translation
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
+	"log/slog"
 	"os"
 	"strings"
 
@@ -52,14 +52,15 @@ func AliTrans(raw string) (string, error) {
 			error = _t
 		}
 		// 错误 message
-		fmt.Println(tea.StringValue(error.Message))
+		slog.Error("阿里翻译 SDK 错误", slog.String("message", tea.StringValue(error.Message)))
 		// 诊断地址
 		var data interface{}
 		d := json.NewDecoder(strings.NewReader(tea.StringValue(error.Data)))
 		d.Decode(&data)
 		if m, ok := data.(map[string]interface{}); ok {
-			recommend, _ := m["Recommend"]
-			fmt.Println(recommend)
+			if recommend, exists := m["Recommend"]; exists {
+				slog.Error("阿里翻译诊断建议", slog.Any("recommend", recommend))
+			}
 		}
 		_, err := util.AssertAsString(error.Message)
 		if err != nil {

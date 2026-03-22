@@ -2,8 +2,6 @@ package main
 
 import (
 	"embed"
-	_ "embed"
-	"log"
 	"log/slog"
 	"time"
 
@@ -48,7 +46,7 @@ func main() {
 		SingleInstance: &application.SingleInstanceOptions{
 			UniqueID: "com.wails.handy-translate",
 			OnSecondInstanceLaunch: func(data application.SecondInstanceData) {
-				log.Printf("Second instance launched with args: %v", data.Args)
+				slog.Info("Second instance launched", slog.Any("args", data.Args))
 			},
 			AdditionalData: map[string]string{
 				"launchtime": time.Now().String(),
@@ -80,14 +78,14 @@ func main() {
 	translate.RegisterAll(providerRegistry)
 
 	// 历史记录服务
-	historySvc := history.NewHistoryService()
+	historySvc := history.NewHistoryService(config.Data.History.Enabled, config.Data.History.StoragePath)
 
 	// 翻译业务门面（门面模式）
 	wordCache := service.NewWordCache("data/word_cache")
 	translator := service.NewTranslator(providerRegistry, &config.Data, eventBus, historySvc, wordCache)
 
 	// 窗口管理器
-	windowMgr := window.NewManager(wailsApp)
+	windowMgr := window.NewManager(wailsApp, eventBus)
 	windowMgr.Toolbar = toolbar.Window
 	windowMgr.Translate = translateWin.Window
 	windowMgr.Screenshot = screenshotWin.Window
@@ -152,6 +150,8 @@ func main() {
 	// 7. 启动 Hook 监听 + 运行应用
 	// ──────────────────────────────────────────
 	go app.ProcessHook()
+
+	slog.Info("🚀 应用启动完成", slog.String("name", projectName))
 
 	err := wailsApp.Run()
 	if err != nil {

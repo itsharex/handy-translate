@@ -42,7 +42,7 @@ func MyFetch(URL string, content map[string]interface{}) interface{} {
 		}
 	}
 
-	slog.Info("req", slog.Any("req", req))
+	slog.Debug("HTTP 请求", slog.String("method", req.Method), slog.String("url", req.URL.String()))
 
 	resp, err := client.Do(req)
 

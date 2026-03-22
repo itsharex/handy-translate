@@ -18,7 +18,6 @@ function App({ variable }) {
   const [appLanguage] = useConfig('app_language', 'zh_cn');
 
   useEffect(() => {
-    console.log(variable, appLanguage)
     if (appLanguage !== null) {
       i18n.changeLanguage(appLanguage);
     }

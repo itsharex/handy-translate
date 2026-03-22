@@ -5,6 +5,7 @@ import (
 	"handy-translate/translate_service/baidu"
 	"handy-translate/translate_service/caiyun"
 	"handy-translate/translate_service/deepseek"
+	"handy-translate/translate_service/google"
 	"handy-translate/translate_service/minimax"
 	"handy-translate/translate_service/youdao"
 )
@@ -39,6 +40,9 @@ func init() {
 	}
 	registry[minimax.Way] = func(cfg config.Translate) Translate {
 		return &minimax.Minimax{Translate: cfg}
+	}
+	registry[google.Way] = func(cfg config.Translate) Translate {
+		return &google.Google{Translate: cfg}
 	}
 }
 

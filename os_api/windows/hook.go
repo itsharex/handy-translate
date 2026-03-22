@@ -1,7 +1,7 @@
 package windows
 
 import (
-	"fmt"
+	"log/slog"
 	"runtime"
 	"sync"
 	"syscall"
@@ -82,7 +82,18 @@ var PressLock sync.RWMutex
 // HookChan channle
 var HookChan = make(chan string, 10)
 
-var state = 0 // 0=等待Ctrl，1=等待Shift，2=等待F
+var state = 0            // 0=等待Ctrl，1=等待Shift，2=等待F
+var stateTime time.Time  // 状态机最后更新时间
+
+// MSG Windows 消息结构体（供 GetMessageW 使用）。
+type MSG struct {
+	HWND    uintptr
+	Message uint32
+	WParam  uintptr
+	LParam  uintptr
+	Time    uint32
+	Pt      POINT
+}
 
 // LowLevelMouseProc 代用windows api 才能做到选中文字，鼠标事件触发前执行模拟ctrl + c 操作
 func LowLevelMouseProc(nCode int, wParam uintptr, lParam uintptr) uintptr {
@@ -127,14 +138,14 @@ func WindowsHook() {
 			0,
 		)
 		if hKeyboardHook == 0 {
-			fmt.Println("❌ 键盘钩子安装失败:", err)
+			slog.Error("键盘钩子安装失败", slog.Any("error", err))
 			return
 		}
 		defer unhookWindowsHookEx.Call(hKeyboardHook)
 
-		fmt.Println("✅ 钩子已安装，请依次按 Ctrl → Shift → F")
+		slog.Info("键盘钩子已安装")
 
-		var msg struct{}
+		var msg MSG
 		// 必须在同一个线程中处理消息循环
 		for {
 			ret, _, _ := getMessageW.Call(uintptr(unsafe.Pointer(&msg)), 0, 0, 0)
@@ -153,7 +164,7 @@ func WindowsHook() {
 		defer unhookWindowsHookEx.Call(hMouseHook)
 	}
 
-	var msg struct{}
+	var msg MSG
 	// 监听消息
 	for {
 		ret, _, _ := getMessageW.Call(uintptr(unsafe.Pointer(&msg)), 0, 0, 0)
@@ -161,19 +172,6 @@ func WindowsHook() {
 			break
 		}
 	}
-}
-
-// 获取鼠标位置
-func GetMousePosition() (x, y int32, err error) {
-	var point struct{ X, Y int32 }
-	// 调用 Windows API：GetCursorPos
-	ret, _, err := syscall.NewLazyDLL("user32.dll").NewProc("GetCursorPos").Call(
-		uintptr(unsafe.Pointer(&point)),
-	)
-	if ret == 0 {
-		return 0, 0, err
-	}
-	return point.X, point.Y, nil
 }
 
 func onKeyboard(nCode int, wParam, lParam uintptr) uintptr {
@@ -187,21 +185,30 @@ func onKeyboard(nCode int, wParam, lParam uintptr) uintptr {
 	return ret
 }
 
+const stateTimeout = 2 * time.Second // 按键状态机超时
+
 func handleSequence(key uint32) {
+	// 超时重置：如果距上次按键超过 2 秒，重置状态机
+	if state != 0 && time.Since(stateTime) > stateTimeout {
+		state = 0
+	}
+
 	switch state {
 	case 0:
 		if key == VK_CTRL {
 			state = 1
+			stateTime = time.Now()
 		}
 	case 1:
 		if key == VK_SHIFT {
 			state = 2
+			stateTime = time.Now()
 		} else if key != VK_CTRL {
 			state = 0
 		}
 	case 2:
 		if key == VK_F {
-			fmt.Println("🎉 顺序匹配成功：Ctrl → Shift → F")
+			slog.Debug("快捷键匹配成功: Ctrl+Shift+F")
 			HookChan <- "screenshot"
 		}
 		state = 0

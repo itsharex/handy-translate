@@ -1,4 +1,4 @@
-// Package app 提供 Wails 前端绑定方法（适配器模式）。
+// binding.go 提供 Wails 前端绑定方法（适配器模式）。
 package app
 
 import (
@@ -116,7 +116,7 @@ func (b *Binding) SetToolBarPinned(pinned bool) {
 
 // GetToolBarPinned 获取工具栏固定状态。
 func (b *Binding) GetToolBarPinned() bool {
-	return b.app.WindowMgr.IsPinned
+	return b.app.WindowMgr.GetPinned()
 }
 
 // QueryWord 单词查询：使用 LLM 一次返回音标、词性、释义（中英）、例句（中英）。
