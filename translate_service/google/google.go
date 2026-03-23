@@ -21,7 +21,7 @@ import (
 const (
 	Way            = "google"
 	DefaultBaseURL = "https://generativelanguage.googleapis.com/v1beta/openai"
-	DefaultModel   = "gemini-2.0-flash"
+	DefaultModel   = "gemini-2.5-flash"
 
 	TranslatePrompts = `You are a professional translator.
 Please translate the following text accurately and naturally.

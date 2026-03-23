@@ -34,7 +34,8 @@ const (
 	ScreenshotBase64 = "screenshotBase64" // 全屏截图 base64 数据
 
 	// 工具栏固定状态
-	ToolbarPinnedUpdated = "toolbarPinnedUpdated" // 通知前端固定状态已更新
+	ToolbarPinnedUpdated    = "toolbarPinnedUpdated"    // 通知前端固定状态已更新
+	ToolbarSlideDirection   = "toolbarSlideDirection"   // 通知前端弹窗滑入方向
 )
 
 // ──────────────────────────────────────────────
@@ -133,4 +134,10 @@ func (b *Bus) EmitScreenshotBase64(base64Image string) {
 // EmitToolbarPinnedUpdated 通知前端工具栏固定状态已更新。
 func (b *Bus) EmitToolbarPinnedUpdated(pinned bool) {
 	b.Emit(ToolbarPinnedUpdated, pinned)
+}
+
+// EmitToolbarSlideDirection 通知前端弹窗滑入方向。
+// direction: "right-bottom", "right-top", "left-bottom", "left-top"
+func (b *Bus) EmitToolbarSlideDirection(direction string) {
+	b.Emit(ToolbarSlideDirection, direction)
 }

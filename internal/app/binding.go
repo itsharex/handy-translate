@@ -101,7 +101,7 @@ func (b *Binding) Hide(windowName string) {
 
 // ToolBarShow 显示工具栏弹窗。
 func (b *Binding) ToolBarShow(height float64) {
-	h := int(height) + 35 + 54
+	h := int(height) + 56 // CardHeader(~46px) + padding(~10px)，与前端 calc(100vh - 42px) 对齐
 	slog.Info("ToolBarShow",
 		slog.Float64("height", height),
 		slog.Bool("isShowing", b.app.WindowMgr.IsToolbarShowing()))

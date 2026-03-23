@@ -139,6 +139,8 @@ func (m *Manager) SetPinned(pinned bool) {
 }
 
 // ShowToolbarAtCursor 在鼠标位置附近显示工具栏。
+// 定位策略：按优先级尝试 4 个方向（右下→右上→左下→左上），
+// 选择第一个能完全容纳弹窗的方向；若全部放不下，则选最大空间方向并缩高。
 func (m *Manager) ShowToolbarAtCursor(height int) {
 	w := m.Toolbar
 	if w == nil {
@@ -146,7 +148,7 @@ func (m *Manager) ShowToolbarAtCursor(height int) {
 	}
 
 	m.mu.Lock()
-	h := min(height, m.QueryResultHeight+500)
+	h := min(height, m.QueryResultHeight+600)
 	if h == 0 {
 		h = m.QueryResultHeight
 	}
@@ -155,7 +157,8 @@ func (m *Manager) ShowToolbarAtCursor(height int) {
 	isPinned := m.isPinned
 	m.mu.Unlock()
 
-	w.SetSize(w.Width(), h)
+	ww := w.Width() // 窗口宽度
+	w.SetSize(ww, h)
 	w.SetAlwaysOnTop(isPinned)
 
 	// 如果窗口已经显示，只调整大小
@@ -174,14 +177,140 @@ func (m *Manager) ShowToolbarAtCursor(height int) {
 		return
 	}
 
+	// 获取光标所在屏幕的工作区域（排除任务栏）
+	// 注意：w.GetScreen() 返回的是窗口所在屏幕。多屏幕环境下，光标可能在
+	// 另一个屏幕上，所以先将窗口移动到光标位置，确保 GetScreen 返回正确的屏幕。
+	w.SetPosition(xval, yval)
 	sc, _ := w.GetScreen()
-	c := int(float64(sc.Size.Height) * 0.1)
+	workArea := sc.WorkArea
 
-	if yval+h+c >= sc.Size.Height {
-		gap := yval + h + c - sc.Size.Height
-		w.SetPosition(xval+10, yval-gap)
-	} else {
-		w.SetPosition(xval+10, yval+10)
+	const gap = 10   // 窗口与光标之间的间距
+	const minH = 120 // 最小允许高度
+
+	// 工作区边界
+	waLeft := workArea.X
+	waRight := workArea.X + workArea.Width
+	waTop := workArea.Y
+	waBottom := workArea.Y + workArea.Height
+
+	// ── 4 个候选方向 ──
+	type candidate struct {
+		name string // 方向名称（发送给前端）
+		posX int
+		posY int
+		fitH int // 该方向可用的最大高度
+		fitW int // 该方向可用的最大宽度
+	}
+
+	candidates := []candidate{
+		{ // 右下（默认）
+			name: "right-bottom",
+			posX: xval + gap,
+			posY: yval + gap,
+			fitW: waRight - (xval + gap),
+			fitH: waBottom - (yval + gap),
+		},
+		{ // 右上
+			name: "right-top",
+			posX: xval + gap,
+			posY: yval - h - gap,
+			fitW: waRight - (xval + gap),
+			fitH: yval - gap - waTop,
+		},
+		{ // 左下
+			name: "left-bottom",
+			posX: xval - ww - gap,
+			posY: yval + gap,
+			fitW: xval - gap - waLeft,
+			fitH: waBottom - (yval + gap),
+		},
+		{ // 左上
+			name: "left-top",
+			posX: xval - ww - gap,
+			posY: yval - h - gap,
+			fitW: xval - gap - waLeft,
+			fitH: yval - gap - waTop,
+		},
+	}
+
+	// 选择第一个能完全容纳弹窗的方向
+	chosen := -1
+	for i, c := range candidates {
+		if c.fitW >= ww && c.fitH >= h {
+			chosen = i
+			break
+		}
+	}
+
+	// 如果四个方向都放不下，选择可用空间（面积）最大的方向
+	if chosen < 0 {
+		bestArea := 0
+		for i, c := range candidates {
+			availW := min(c.fitW, ww)
+			availH := min(c.fitH, h)
+			if availW < 0 {
+				availW = 0
+			}
+			if availH < 0 {
+				availH = 0
+			}
+			area := availW * availH
+			if area > bestArea {
+				bestArea = area
+				chosen = i
+			}
+		}
+		if chosen < 0 {
+			chosen = 0 // fallback
+		}
+
+		// 动态缩小高度以适应可用空间
+		availH := candidates[chosen].fitH
+		if availH < h && availH >= minH {
+			h = availH
+			w.SetSize(ww, h)
+		} else if availH < minH {
+			h = minH
+			w.SetSize(ww, h)
+		}
+	}
+
+	c := candidates[chosen]
+	posX := c.posX
+	posY := c.posY
+
+	// 如果高度被缩小了，需要重新计算上方方向的 posY
+	if chosen == 1 || chosen == 3 { // 上方方向
+		posY = yval - h - gap
+	}
+
+	// 边界钳制（保护）
+	if posX+ww > waRight {
+		posX = waRight - ww
+	}
+	if posX < waLeft {
+		posX = waLeft
+	}
+	if posY+h > waBottom {
+		posY = waBottom - h
+	}
+	if posY < waTop {
+		posY = waTop
+	}
+
+	slog.Debug("ShowToolbarAtCursor 定位",
+		slog.String("direction", c.name),
+		slog.Int("cursorX", xval), slog.Int("cursorY", yval),
+		slog.Int("posX", posX), slog.Int("posY", posY),
+		slog.Int("winW", ww), slog.Int("winH", h),
+		slog.Int("workAreaX", workArea.X), slog.Int("workAreaY", workArea.Y),
+		slog.Int("workAreaW", workArea.Width), slog.Int("workAreaH", workArea.Height))
+
+	w.SetPosition(posX, posY)
+
+	// 通知前端滑入方向
+	if m.eventBus != nil {
+		m.eventBus.EmitToolbarSlideDirection(c.name)
 	}
 
 	// 显示窗口

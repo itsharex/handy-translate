@@ -178,7 +178,7 @@ name = 'Google Gemini'
 appID = 'google'
 key = ''                               # Google AI API Key
 base_url = ''                          # 可留空，使用默认 Gemini 地址
-model = 'gemini-2.0-flash'             # 可选：gemini-2.0-flash / gemini-2.5-pro 等
+model = 'gemini-2.5-flash'             # 可选：gemini-2.5-flash / gemini-2.5-pro 等
 
 # ──────────────────────────────────────
 # 解释模板配置（LLM 解释模式使用）

@@ -42,7 +42,7 @@ func NewWindow(app *application.App) {
 		BackgroundType:  application.BackgroundTypeTranslucent, // 半透明背景，支持圆角
 	})
 
-	Window.SetMaxSize(QueryResultWidth+100, QueryResultHeight+500)
+	Window.SetMaxSize(QueryResultWidth+100, QueryResultHeight+600)
 
 	// 处理窗口显示事件 - 在首次显示时应用 Windows 样式
 	Window.OnWindowEvent(events.Common.WindowShow, func(e *application.WindowEvent) {

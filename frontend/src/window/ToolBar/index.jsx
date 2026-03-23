@@ -1,15 +1,16 @@
 import React, { useEffect, useState, useRef, useCallback, useMemo } from "react";
-import { Button, Card, CardBody, CardHeader, Divider, Tooltip, Spinner, Skeleton, Tabs, Tab, Dropdown, DropdownTrigger, DropdownMenu, DropdownItem } from "@nextui-org/react";
+import { Button, Card, CardBody, CardHeader, Divider, Tooltip, Spinner, Skeleton, Tabs, Tab, Dropdown, DropdownTrigger, DropdownMenu, DropdownItem, Popover, PopoverTrigger, PopoverContent } from "@nextui-org/react";
 import { HeartIcon } from './HeartIcon';
 import { CameraIcon } from './CameraIcon';
 import { BsTranslate } from "react-icons/bs";
-import { MdContentCopy, MdVolumeUp, MdPushPin, MdOutlinePushPin, MdLightbulb, MdCheck } from "react-icons/md";
+import { MdContentCopy, MdVolumeUp, MdPushPin, MdOutlinePushPin, MdLightbulb, MdCheck, MdPalette } from "react-icons/md";
 import { ToolBarShow, Show, Hide, SetToolBarPinned, GetToolBarPinned, Translate, TranslateMeanings, GetToolbarMode, GetExplainTemplates, SetDefaultExplainTemplate } from "../../../bindings/handy-translate/internal/app/binding";
 import { lingva_tts } from "../../services/tts";
 import { useVoice } from "../../hooks/useVoice";
 import { Events, Window } from "@wailsio/runtime";
 import { useTranslation } from 'react-i18next';
 import ReactMarkdown from 'react-markdown';
+import { themes, themeIds, applyThemeCssVars, getSavedThemeId, saveThemeId } from '../../themes';
 
 // 常量配置
 const CONSTANTS = {
@@ -57,15 +58,30 @@ export default function ToolBar() {
     const [playingExample, setPlayingExample] = useState('') // 当前播放的例句文本
     const [isPinned, setIsPinned] = useState(false) // 是否固定窗口
     const [isAnimating, setIsAnimating] = useState(true) // 动画状态
+    const [slideDirection, setSlideDirection] = useState('right-bottom') // 滑入方向
     const [mode, setMode] = useState('translate') // 模式：translate/explain
     const modeRef = useRef('translate') // 用于在事件处理函数中访问最新的 mode 值
     const [explainTemplates, setExplainTemplates] = useState([]) // 解释模板列表
     const [selectedTemplate, setSelectedTemplate] = useState('') // 选中的模板ID
     const selectedTemplateRef = useRef('') // 用于在事件处理函数中访问最新的 selectedTemplate 值
     const [defaultTemplate, setDefaultTemplate] = useState('') // 默认模板ID
+    const [currentTheme, setCurrentTheme] = useState(() => getSavedThemeId()) // 当前主题
     const playOrStop = useVoice()
     const contentRef = useRef(); // 实际内容容器的引用
     const { t } = useTranslation(); // 国际化
+    const theme = themes[currentTheme] || themes.warm; // 当前主题对象
+
+    // 初始化主题
+    useEffect(() => {
+        applyThemeCssVars(currentTheme)
+    }, [currentTheme])
+
+    // 切换主题
+    const handleThemeChange = useCallback((themeId) => {
+        setCurrentTheme(themeId)
+        saveThemeId(themeId)
+        applyThemeCssVars(themeId)
+    }, [])
 
     // 初始化时从后端获取固定状态、模式和模板列表
     useEffect(() => {
@@ -130,9 +146,16 @@ export default function ToolBar() {
             setIsPinned(pinned)
         })
 
+        // 监听后端推送的弹窗滑入方向
+        const unsubscribeSlideDirection = Events.On("toolbarSlideDirection", function (data) {
+            const dir = typeof data.data === 'string' ? data.data : 'right-bottom'
+            setSlideDirection(dir)
+        })
+
         return () => {
             if (unsubscribeModeUpdated) unsubscribeModeUpdated()
             if (unsubscribePinnedUpdated) unsubscribePinnedUpdated()
+            if (unsubscribeSlideDirection) unsubscribeSlideDirection()
         }
     }, [])
 
@@ -363,11 +386,9 @@ export default function ToolBar() {
                     // 获取实际渲染内容的高度
                     const contentHeight = contentRef.current.scrollHeight
 
-                    // CardHeader 高度约 52px，Divider 1px，CardBody 的实际内容高度
-                    const maxContentHeight = 500 // 最大内容高度
+                    // 最大内容高度限制：超过此高度时 CardBody 会出现滚动条
+                    const maxContentHeight = 450
                     const actualContentHeight = Math.min(contentHeight, maxContentHeight)
-
-
 
                     // 调用 ToolBarShow 会自动显示窗口并设置高度
                     ToolBarShow(actualContentHeight)
@@ -381,16 +402,16 @@ export default function ToolBar() {
     // 获取词性标签样式
     const getPartOfSpeechStyle = (partOfSpeech) => {
         const styles = {
-            'noun': 'bg-[#EBF5FF] text-[#1E3A8A]',      // 蓝色系
-            'verb': 'bg-[#F0FDF4] text-[#14532D]',      // 绿色系
-            'adjective': 'bg-[#FFF7ED] text-[#7C2D12]', // 橙色系
-            'adverb': 'bg-[#FEF2F2] text-[#7F1D1D]',    // 红色系
-            'pronoun': 'bg-[#FDF2F8] text-[#831843]',   // 粉色系
-            'preposition': 'bg-[#FEFCE8] text-[#713F12]', // 黄色系
-            'conjunction': 'bg-[#F3F4F6] text-[#1F2937]', // 灰色
-            'interjection': 'bg-[#F5F3FF] text-[#4C1D95]', // 紫色
+            'noun': 'bg-[#FFF5E6] text-[#92400E]',        // 琥珀色系
+            'verb': 'bg-[#FEF7E0] text-[#78350F]',        // 深金色系
+            'adjective': 'bg-[#FFF0F0] text-[#9A3412]',   // 暖红色系
+            'adverb': 'bg-[#FFF8F0] text-[#A16207]',      // 橙棕色系
+            'pronoun': 'bg-[#FFF5F5] text-[#C4533A]',     // 赤陶色系
+            'preposition': 'bg-[#FEFCE8] text-[#854D0E]', // 土金色系
+            'conjunction': 'bg-[#FDF5EF] text-[#6B4226]', // 棕色系
+            'interjection': 'bg-[#FEF2F2] text-[#B91C1C]', // 暖赤色
         }
-        return styles[partOfSpeech] || 'bg-[#F3F4F6] text-[#4B5563]'
+        return styles[partOfSpeech] || 'bg-[#F5F0E8] text-[#6B5744]'
     }
 
     // 获取词性缩写
@@ -438,7 +459,7 @@ export default function ToolBar() {
                 parts.push(text.substring(lastIndex, match.index))
             }
             parts.push(
-                <span key={match.index} className="font-[700] text-[#1D4ED8] bg-[#FEF9C3] rounded-[2px] px-[2px] mx-[1px] not-italic transition-all duration-200">
+                <span key={match.index} className="font-[700] rounded-[2px] px-[2px] mx-[1px] not-italic transition-all duration-200" style={{ color: 'var(--color-highlight-text)', backgroundColor: 'var(--color-highlight-bg)' }}>
                     {match[0]}
                 </span>
             )
@@ -454,7 +475,7 @@ export default function ToolBar() {
     // 渲染加载动画
     const renderLoading = () => {
         return (
-            <div className="loading-container p-5 flex flex-col items-center justify-center space-y-3 min-h-[80px]">
+            <div className="loading-container p-3 flex flex-col items-center justify-center space-y-2 min-h-[60px]">
                 <div className="space-y-2.5 w-full">
                     <div className="h-3 w-4/5 rounded-full loading-skeleton"></div>
                     <div className="h-3 w-full rounded-full loading-skeleton" style={{ animationDelay: '0.15s' }}></div>
@@ -470,10 +491,10 @@ export default function ToolBar() {
         return (
             <>
                 {/* 单词 + 音标 + 播放按钮 */}
-                <div className="flex items-center gap-[12px] mb-[16px]">
-                    <h3 className="text-[28px] font-[600] text-[#111827] tracking-tight leading-none">{queryText}</h3>
+                <div className="flex items-center gap-[10px] mb-[10px]">
+                    <h3 className="text-[22px] font-[600] tracking-tight leading-none" style={{ color: 'var(--color-text-main)' }}>{queryText}</h3>
                     {wordDetails?.phonetic && (
-                        <span className="text-[14px] text-[#6B7280] font-normal tracking-wide mt-[4px]">/{wordDetails.phonetic.replace(/[\/\[\]]/g, '')}/</span>
+                        <span className="text-[14px] font-normal tracking-wide mt-[4px]" style={{ color: 'var(--color-text-secondary)' }}>/{wordDetails.phonetic.replace(/[\/\[\]]/g, '')}/</span>
                     )}
                     <Tooltip content="播放发音" placement="top" delay={500}>
                         <Button
@@ -484,7 +505,7 @@ export default function ToolBar() {
                             aria-label="Play English"
                             onPress={handleSpeakEnglish}
                             isLoading={isPlayingEn}
-                            className="shrink-0 w-[36px] h-[36px] min-w-[36px] bg-transparent text-indigo-500 hover:bg-indigo-50 hover:text-indigo-600 active:bg-indigo-100 active:scale-95 transition-all duration-300 mt-[4px]"
+                            className={`shrink-0 w-[30px] h-[30px] min-w-[30px] bg-transparent ${theme.classes.speakBtn} active:scale-95 transition-all duration-300 mt-[2px]`}
                         >
                             <MdVolumeUp className="text-[20px]" />
                         </Button>
@@ -494,30 +515,30 @@ export default function ToolBar() {
                 {/* 词性和释义 */}
                 {wordDetails?.meanings && wordDetails.meanings.length > 0 ? (
                     wordDetails.meanings.map((meaning, idx) => (
-                        <div key={idx} className={`word-card-section ${idx > 0 ? 'mt-[16px] pt-[16px] border-t border-[#F3F4F6]' : ''}`}>
+                        <div key={idx} className={`word-card-section ${idx > 0 ? 'mt-[10px] pt-[10px]' : ''}`} style={idx > 0 ? { borderTop: '1px solid var(--color-border-light)' } : undefined}>
                             {/* 词性标签 */}
-                            <span className={`inline-block px-[8px] py-[2px] rounded-[4px] text-[11px] font-[600] uppercase tracking-wider mb-3 ${getPartOfSpeechStyle(meaning.partOfSpeech)}`}>
+                            <span className={`inline-block px-[8px] py-[2px] rounded-[4px] text-[11px] font-[600] uppercase tracking-wider mb-2 ${getPartOfSpeechStyle(meaning.partOfSpeech)}`}>
                                 {getPartOfSpeechAbbr(meaning.partOfSpeech)}
                             </span>
 
                             {/* 释义列表 */}
-                            <div className="space-y-[16px]">
+                            <div className="space-y-[10px]">
                                 {meaning.definitions.map((def, defIdx) => {
                                     return (
                                         <div key={defIdx}>
                                             {/* 英文释义 + 中文翻译 */}
-                                            <div className="flex flex-col gap-[8px] mb-[12px]">
-                                                <p className="text-[14px] text-[#1F2937] leading-[1.7]">{def.definition}</p>
+                                            <div className="flex flex-col gap-[4px] mb-[8px]">
+                                                <p className="text-[13px] leading-[1.6]" style={{ color: 'var(--color-text-main)' }}>{def.definition}</p>
                                                 {def.definitionZh && (
-                                                    <p className="text-[14px] text-[#374151] leading-[1.7]">{def.definitionZh}</p>
+                                                    <p className="text-[13px] leading-[1.6]" style={{ color: 'var(--color-body)' }}>{def.definitionZh}</p>
                                                 )}
                                             </div>
 
                                             {/* 英文例句 */}
                                             {def.example && (
-                                                <div className="px-[12px] py-[10px] bg-[#F0F7FF] border-l-[3px] border-[#2E75B6] rounded-r-[6px]">
+                                                <div className="px-[10px] py-[6px] rounded-r-[6px]" style={{ background: 'var(--color-example-bg)', borderLeft: '2px solid var(--color-example-border)' }}>
                                                     <div className="flex items-start gap-3">
-                                                        <p className="flex-1 text-[13.5px] text-[#1F2937] leading-[1.8]">
+                                                        <p className="flex-1 text-[12.5px] leading-[1.6]" style={{ color: 'var(--color-text-main)' }}>
                                                             "{highlightWord(def.example, queryText)}"
                                                         </p>
                                                         <Tooltip content="播放例句" placement="top" delay={500}>
@@ -529,14 +550,14 @@ export default function ToolBar() {
                                                                 aria-label="Play Example"
                                                                 onPress={() => handleSpeakExample(def.example)}
                                                                 isLoading={playingExample === def.example}
-                                                                className="shrink-0 w-[36px] h-[36px] min-w-[36px] bg-white/50 text-indigo-500 hover:bg-white hover:text-indigo-600 hover:shadow-sm active:scale-95 transition-all duration-300"
+                                                                className={`shrink-0 w-[28px] h-[28px] min-w-[28px] ${theme.classes.speakBtnExample} active:scale-95 transition-all duration-300`}
                                                             >
-                                                                <MdVolumeUp className="text-[18px]" />
+                                                                <MdVolumeUp className="text-[16px]" />
                                                             </Button>
                                                         </Tooltip>
                                                     </div>
                                                     {def.exampleZh && (
-                                                        <p className="mt-[6px] text-[13px] text-[#64748B] leading-[1.6]">{def.exampleZh}</p>
+                                                        <p className="mt-[4px] text-[12px] leading-[1.5]" style={{ color: 'var(--color-muted)' }}>{def.exampleZh}</p>
                                                     )}
                                                 </div>
                                             )}
@@ -569,8 +590,8 @@ export default function ToolBar() {
 
                 {/* 底部中文翻译 */}
                 {(wordDetails?.translation || resultStream) && (
-                    <div className="pt-[16px] mt-[16px] border-t border-[#E5E7EB] flex items-center justify-between gap-3">
-                        <p className="text-[16px] font-[500] text-[#111827] leading-[1.6] flex-1">{wordDetails?.translation || resultStream}</p>
+                    <div className="pt-[8px] mt-[10px] flex items-center justify-between gap-2" style={{ borderTop: '1px solid var(--color-border-section)' }}>
+                        <p className="text-[14px] font-[500] leading-[1.5] flex-1" style={{ color: 'var(--color-text-main)' }}>{wordDetails?.translation || resultStream}</p>
                         <Tooltip content="播放发音" placement="top" delay={500}>
                             <Button
                                 size="sm"
@@ -580,7 +601,7 @@ export default function ToolBar() {
                                 aria-label="Play Chinese"
                                 onPress={handleSpeakChinese}
                                 isLoading={isPlayingZh}
-                                className="shrink-0 w-[36px] h-[36px] min-w-[36px] bg-transparent text-slate-500 hover:bg-indigo-50 hover:text-indigo-600 active:bg-indigo-100 active:scale-95 transition-all duration-300"
+                                className={`shrink-0 w-[30px] h-[30px] min-w-[30px] bg-transparent ${theme.classes.speakBtn} active:scale-95 transition-all duration-300`}
                             >
                                 <MdVolumeUp className="text-[20px]" />
                             </Button>
@@ -592,18 +613,22 @@ export default function ToolBar() {
 
     }
 
+    // 根据滑入方向生成动画 class
+    const slideAnimClass = `toolbar-slide-${slideDirection}`
+
     return (
+        <div className={slideAnimClass}>
         <Card
             shadow="none"
             className='rounded-[20px] w-full bg-white transition-all duration-200 overflow-hidden'
             style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}>
 
-            <CardHeader className='px-[24px] py-[12px] bg-gradient-to-r from-[#d4f0f7] to-[#dbeafe] border-b border-[#bae6fd]/50 flex justify-between items-center' style={{ "--wails-draggable": "drag" }}>
+            <CardHeader className={`px-[16px] py-[6px] ${theme.classes.header} flex justify-between items-center`} style={{ "--wails-draggable": "drag" }}>
 
-                <div className="flex gap-[12px] items-center w-full justify-between" style={{ WebkitAppRegion: 'drag' }}>
+                <div className="flex gap-[8px] items-center w-full justify-between" style={{ WebkitAppRegion: 'drag' }}>
                     {/* 应用 Logo 面板锚点 */}
-                    <div className="flex justify-center items-center w-[36px] h-[36px] min-w-[36px] select-none pointer-events-none bg-white/60 backdrop-blur-sm rounded-full shadow-sm border border-white/40">
-                        <img src="/appicon.png" alt="Handy Translate" className="w-[24px] h-[24px] object-contain drop-shadow-sm" draggable="false" />
+                    <div className={`flex justify-center items-center w-[28px] h-[28px] min-w-[28px] select-none pointer-events-none ${theme.classes.logoBg} rounded-full shadow-sm`}>
+                        <img src="/appicon.png" alt="Handy Translate" className="w-[18px] h-[18px] object-contain drop-shadow-sm" draggable="false" />
                     </div>
 
                     {/* 翻译/解释模式切换 */}
@@ -630,10 +655,10 @@ export default function ToolBar() {
                         size="sm"
                         aria-label="Mode Switch"
                         classNames={{
-                            tabList: "bg-slate-100/80 backdrop-blur-md rounded-[10px] p-[4px] border border-slate-200/50",
-                            cursor: "bg-gradient-to-r from-blue-500 to-indigo-500 shadow-md shadow-indigo-500/20 rounded-[8px]",
-                            tab: "h-[28px] px-[12px] rounded-[8px] transition-all duration-300",
-                            tabContent: "text-slate-500 group-data-[selected=true]:text-white group-data-[selected=true]:font-[500]"
+                            tabList: theme.classes.tabList,
+                            cursor: theme.classes.tabCursor,
+                            tab: "h-[24px] px-[10px] rounded-[8px] transition-all duration-300",
+                            tabContent: theme.classes.tabContent
                         }}
                     >
                         <Tab
@@ -708,17 +733,17 @@ export default function ToolBar() {
                         </Dropdown>
                     )}
 
-                    <div className="flex gap-[8px]">
+                    <div className="flex gap-[6px]">
                         <Tooltip content={isPinned ? "取消固定" : "固定窗口"} placement="bottom" delay={500}>
                             <Button
                                 size="sm"
                                 isIconOnly
                                 variant="flat"
-                                className={`w-[36px] h-[36px] min-w-[36px] rounded-full active:scale-90 transition-all duration-300 ${isPinned ? 'bg-gradient-to-tr from-orange-400 to-amber-500 text-white shadow-md shadow-orange-500/30 pinned-glow border border-orange-300' : 'bg-white/60 backdrop-blur-sm text-slate-500 hover:bg-orange-50 hover:text-orange-500 active:bg-orange-100 active:text-orange-600 border border-white/40 hover:border-orange-200 shadow-sm'}`}
+                                className={`w-[28px] h-[28px] min-w-[28px] rounded-full active:scale-90 transition-all duration-300 ${isPinned ? theme.classes.pinActive : theme.classes.pinInactive}`}
                                 aria-label="Pin"
                                 onPress={handlePinToggle}
                             >
-                                {isPinned ? <MdPushPin className="text-[20px] drop-shadow-sm" /> : <MdOutlinePushPin className="text-[20px]" />}
+                                {isPinned ? <MdPushPin className="text-[16px] drop-shadow-sm" /> : <MdOutlinePushPin className="text-[16px]" />}
                             </Button>
                         </Tooltip>
 
@@ -727,14 +752,52 @@ export default function ToolBar() {
                                 size="sm"
                                 isIconOnly
                                 variant="flat"
-                                className={`w-[36px] h-[36px] min-w-[36px] rounded-full active:scale-90 transition-all duration-300 ${isCopied ? 'bg-gradient-to-tr from-emerald-400 to-teal-500 text-white shadow-md shadow-emerald-500/30 border border-emerald-300' : 'bg-white/60 backdrop-blur-sm text-slate-500 hover:bg-emerald-50 hover:text-emerald-500 active:bg-emerald-100 active:text-emerald-600 border border-white/40 hover:border-emerald-200 shadow-sm'}`}
+                                className={`w-[28px] h-[28px] min-w-[28px] rounded-full active:scale-90 transition-all duration-300 ${isCopied ? theme.classes.copyActive : theme.classes.copyInactive}`}
                                 aria-label="Copy"
                                 onPress={handleCopy}
                                 isDisabled={!(result || resultStream)}
                             >
-                                {isCopied ? <MdCheck className="text-[20px] drop-shadow-sm animate-appearance-in" /> : <MdContentCopy className="text-[20px]" />}
+                                {isCopied ? <MdCheck className="text-[16px] drop-shadow-sm animate-appearance-in" /> : <MdContentCopy className="text-[16px]" />}
                             </Button>
                         </Tooltip>
+
+                        {/* 主题切换 */}
+                        <Popover placement="bottom" offset={8}>
+                            <PopoverTrigger>
+                                <Button
+                                    size="sm"
+                                    isIconOnly
+                                    variant="flat"
+                                    className={`w-[28px] h-[28px] min-w-[28px] rounded-full active:scale-90 transition-all duration-300 ${theme.classes.themeBtn}`}
+                                    aria-label="Theme"
+                                >
+                                    <MdPalette className="text-[16px]" />
+                                </Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="p-3 bg-white/95 backdrop-blur-md shadow-lg rounded-[14px] border border-black/5">
+                                <div className="flex gap-[10px] items-center">
+                                    {themeIds.map(id => (
+                                        <Tooltip key={id} content={themes[id].name} placement="bottom" delay={300}>
+                                            <button
+                                                onClick={() => handleThemeChange(id)}
+                                                className="relative w-[28px] h-[28px] rounded-full transition-all duration-300 hover:scale-110 active:scale-95 focus:outline-none"
+                                                style={{
+                                                    background: themes[id].dot,
+                                                    boxShadow: currentTheme === id
+                                                        ? `0 0 0 2.5px white, 0 0 0 4.5px ${themes[id].dot}`
+                                                        : '0 1px 3px rgba(0,0,0,0.15)',
+                                                }}
+                                                aria-label={themes[id].name}
+                                            >
+                                                {currentTheme === id && (
+                                                    <MdCheck className="absolute inset-0 m-auto text-white text-[16px] drop-shadow-sm" />
+                                                )}
+                                            </button>
+                                        </Tooltip>
+                                    ))}
+                                </div>
+                            </PopoverContent>
+                        </Popover>
 
                     </div>
 
@@ -743,7 +806,7 @@ export default function ToolBar() {
             </CardHeader>
 
 
-            <CardBody className="overflow-hidden px-[24px] pb-[12px] pt-0">
+            <CardBody className="overflow-y-auto overflow-x-hidden px-[12px] pb-[6px] pt-0" style={{ maxHeight: 'calc(100vh - 42px)' }}>
                 {isLoading && !resultStream && !isWordLoading ? (
                     renderLoading()
                 ) : !(result || resultStream || resultMeaningsStream || (isWord && (wordDetails || isWordLoading))) ? (
@@ -752,7 +815,7 @@ export default function ToolBar() {
                         <span>选中文字即可翻译</span>
                     </div>
                 ) : (
-                    <div ref={contentRef} className="max-h-[500px] overflow-y-auto w-full">
+                    <div ref={contentRef} className="w-full">
                         {isWord && mode !== 'explain' ? (
                             <div className="w-full">
                                 {renderWordDetailsContent()}
@@ -762,25 +825,25 @@ export default function ToolBar() {
                             <div className="markdown-content leading-relaxed pb-0">
                                 <ReactMarkdown
                                     components={{
-                                        h1: ({ node, ...props }) => <h1 className="text-xl font-bold mb-3 mt-4 text-slate-900" {...props} />,
-                                        h2: ({ node, ...props }) => <h2 className="text-lg font-bold mb-2 mt-3 text-slate-800" {...props} />,
-                                        h3: ({ node, ...props }) => <h3 className="text-base font-semibold mb-2 mt-3 text-slate-800" {...props} />,
-                                        h4: ({ node, ...props }) => <h4 className="text-sm font-semibold mb-1 mt-2 text-slate-700" {...props} />,
-                                        p: ({ node, ...props }) => <p className="mb-3 leading-relaxed break-words text-slate-600" style={{ wordBreak: 'break-word' }} {...props} />,
-                                        ul: ({ node, ...props }) => <ul className="list-disc list-inside mb-3 space-y-1 ml-4 text-slate-600" {...props} />,
-                                        ol: ({ node, ...props }) => <ol className="list-decimal list-inside mb-3 space-y-1 ml-4 text-slate-600" {...props} />,
+                                        h1: ({ node, ...props }) => <h1 className="text-xl font-bold mb-3 mt-4" style={{ color: 'var(--color-heading)' }} {...props} />,
+                                        h2: ({ node, ...props }) => <h2 className="text-lg font-bold mb-2 mt-3" style={{ color: 'var(--color-heading)' }} {...props} />,
+                                        h3: ({ node, ...props }) => <h3 className="text-base font-semibold mb-2 mt-3" style={{ color: 'var(--color-heading)' }} {...props} />,
+                                        h4: ({ node, ...props }) => <h4 className="text-sm font-semibold mb-1 mt-2" style={{ color: 'var(--color-body)' }} {...props} />,
+                                        p: ({ node, ...props }) => <p className="mb-3 leading-relaxed break-words" style={{ wordBreak: 'break-word', color: 'var(--color-body)' }} {...props} />,
+                                        ul: ({ node, ...props }) => <ul className="list-disc list-inside mb-3 space-y-1 ml-4" style={{ color: 'var(--color-body)' }} {...props} />,
+                                        ol: ({ node, ...props }) => <ol className="list-decimal list-inside mb-3 space-y-1 ml-4" style={{ color: 'var(--color-body)' }} {...props} />,
                                         li: ({ node, ...props }) => <li className="leading-relaxed" {...props} />,
                                         code: ({ node, inline, ...props }) =>
                                             inline ? (
-                                                <code className="bg-slate-100 text-red-600 px-1.5 py-0.5 rounded text-sm font-mono border border-slate-200" {...props} />
+                                                <code className="px-1.5 py-0.5 rounded text-sm font-mono" style={{ background: 'var(--color-code-bg)', color: 'var(--color-code-text)', border: '1px solid var(--color-code-border)' }} {...props} />
                                             ) : (
-                                                <code className="block bg-slate-50 text-slate-700 p-3 rounded-lg mb-3 overflow-x-auto font-mono text-sm whitespace-pre border border-slate-200" {...props} />
+                                                <code className="block p-3 rounded-lg mb-3 overflow-x-auto font-mono text-sm whitespace-pre" style={{ background: 'var(--color-pre-bg)', color: 'var(--color-body)', border: '1px solid var(--color-pre-border)' }} {...props} />
                                             ),
-                                        pre: ({ node, ...props }) => <pre className="bg-slate-50 rounded-lg mb-3 overflow-x-auto border border-slate-200" {...props} />,
-                                        blockquote: ({ node, ...props }) => <blockquote className="border-l-3 border-blue-400 pl-4 italic my-3 text-slate-500" {...props} />,
-                                        strong: ({ node, ...props }) => <strong className="font-semibold text-slate-900" {...props} />,
-                                        em: ({ node, ...props }) => <em className="italic text-slate-500" {...props} />,
-                                        hr: ({ node, ...props }) => <hr className="my-4 border-slate-200" {...props} />,
+                                        pre: ({ node, ...props }) => <pre className="rounded-lg mb-3 overflow-x-auto" style={{ background: 'var(--color-pre-bg)', border: '1px solid var(--color-pre-border)' }} {...props} />,
+                                        blockquote: ({ node, ...props }) => <blockquote className="pl-4 italic my-3" style={{ borderLeft: '3px solid var(--color-quote-border)', color: 'var(--color-muted)' }} {...props} />,
+                                        strong: ({ node, ...props }) => <strong className="font-semibold" style={{ color: 'var(--color-heading)' }} {...props} />,
+                                        em: ({ node, ...props }) => <em className="italic" style={{ color: 'var(--color-muted)' }} {...props} />,
+                                        hr: ({ node, ...props }) => <hr className="my-4" style={{ borderColor: 'var(--color-border-section)' }} {...props} />,
                                     }}
                                 >
                                     {resultStream || result}
@@ -798,5 +861,6 @@ export default function ToolBar() {
             </CardBody>
 
         </Card >
+        </div>
     );
 }
